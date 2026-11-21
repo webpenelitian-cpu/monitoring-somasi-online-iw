@@ -29,13 +29,20 @@ window.CLOUD = (function () {
     })().catch(e => { siap = null; throw e; }));
   }
 
-  async function masukGoogle() {
-    await init();
+  /** Jendela Google WAJIB dibuka langsung di dalam klik pengguna (tanpa await sebelumnya), atau peramban memblokirnya
+      (auth/popup-blocked / cancelled-popup-request). SDK sudah dimuat oleh init() saat layar kunci tampil. */
+  function masukGoogle() {
+    if (!auth) return Promise.reject(new Error('Layanan login belum siap. Muat ulang halaman lalu coba lagi.'));
     const p = new A.GoogleAuthProvider();
     p.setCustomParameters({ prompt: 'select_account' });
-    user = (await A.signInWithPopup(auth, p)).user;
-    if (!(await anggota())) { await keluar(); throw new Error('Akun ini belum terdaftar sebagai anggota. Minta administrator menambahkan UID Anda.'); }
-    return user;
+    return A.signInWithPopup(auth, p).then(async hasil => {
+      user = hasil.user;
+      if (await anggota()) return user;
+      const uid = user.uid, email = user.email;
+      await keluar();
+      const e = new Error(`Akun ${email} belum terdaftar sebagai anggota. Minta administrator menambahkan dokumen anggota/${uid}.`);
+      e.uid = uid; throw e;
+    });
   }
   async function keluar() { if (auth) await A.signOut(auth); user = null; }
   async function anggota() {

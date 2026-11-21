@@ -79,9 +79,17 @@
     $('#sandi').autocomplete = ada ? 'current-password' : 'new-password';
   }
   $('#btn-google').addEventListener('click', async () => {
-    galatKunci('');
-    try { await window.CLOUD.masukGoogle(); await siapkanKunci(); } catch (e) { galatKunci(e.message || String(e)); }
+    const b = $('#btn-google');
+    if (b.disabled) return;
+    galatKunci(''); b.disabled = true;
+    try { await window.CLOUD.masukGoogle(); await siapkanKunci(); } catch (e) { galatKunci(pesanLogin(e)); } finally { b.disabled = false; }
   });
+  function pesanLogin(e) {
+    const k = (e && e.code) || '';
+    if (k === 'auth/popup-blocked') return 'Jendela login Google diblokir peramban. Izinkan pop-up untuk situs ini, lalu klik lagi.';
+    if (k === 'auth/popup-closed-by-user' || k === 'auth/cancelled-popup-request') return 'Login dibatalkan. Klik "Masuk dengan Google" sekali lagi.';
+    return (e && e.message) || String(e);
+  }
 
   async function kirimKunci(ev) {
     ev.preventDefault(); galatKunci('');
