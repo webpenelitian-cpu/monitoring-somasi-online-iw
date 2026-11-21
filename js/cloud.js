@@ -40,13 +40,15 @@ window.CLOUD = (function () {
       if (await anggota()) return user;
       const uid = user.uid, email = user.email;
       await keluar();
-      const e = new Error(`Akun ${email} belum terdaftar sebagai anggota. Minta administrator menambahkan dokumen anggota/${uid}.`);
+      const e = new Error(`Akun ${email} belum terdaftar sebagai anggota. Minta administrator menambahkan dokumen anggota_email/${String(email).toLowerCase()} (atau anggota/${uid}).`);
       e.uid = uid; throw e;
     });
   }
   async function keluar() { if (auth) await A.signOut(auth); user = null; }
+  /** Anggota bila ada anggota/{uid} atau anggota_email/{email huruf kecil}. */
   async function anggota() {
-    try { return (await F.getDoc(F.doc(db, 'anggota', user.uid))).exists(); } catch { return false; }
+    const ada = async (kol, id) => { try { return (await F.getDoc(F.doc(db, kol, id))).exists(); } catch { return false; } };
+    return (await ada('anggota', user.uid)) || (!!user.email && await ada('anggota_email', user.email.toLowerCase()));
   }
 
   async function baca() {
