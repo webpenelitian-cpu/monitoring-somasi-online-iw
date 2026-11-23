@@ -7,7 +7,10 @@
   // Modul isi aplikasi dimuat setelah layar kunci tampil (saat kolom sandi difokus / formulir dikirim), agar layar kunci ringan.
   let D = window.DATA, T = window.TAMPIL, janjiModul = null;
   const MODUL = ['js/data.js', 'js/xlsx.js', 'js/ekstrak.js', 'js/ocr.js', 'js/drive.js', 'js/grafik.js', 'js/tampilan.js', 'js/panduan.js'];
+  // Penanda versi dari situs publik (diisi alat/bangun_online.py) agar peramban tidak memakai JS lama dari cache.
+  const VERSI = ((document.querySelector('meta[name="versi-aset"]') || {}).content || '').replace(/[^\w]/g, '');
   function muatSatu(src) {
+    if (VERSI) src += '?v=' + VERSI;
     return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Gagal memuat ' + src)); document.head.appendChild(s); });
   }
   function muatModul() {
