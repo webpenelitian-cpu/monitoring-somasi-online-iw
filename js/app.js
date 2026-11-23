@@ -6,7 +6,7 @@
   const S = window.SIMPAN, K = window.KRIPTO;
   // Modul isi aplikasi dimuat setelah layar kunci tampil (saat kolom sandi difokus / formulir dikirim), agar layar kunci ringan.
   let D = window.DATA, T = window.TAMPIL, janjiModul = null;
-  const MODUL = ['js/data.js', 'js/xlsx.js', 'js/ekstrak.js', 'js/ocr.js', 'js/drive.js', 'js/grafik.js', 'js/tampilan.js'];
+  const MODUL = ['js/data.js', 'js/xlsx.js', 'js/ekstrak.js', 'js/ocr.js', 'js/drive.js', 'js/grafik.js', 'js/tampilan.js', 'js/panduan.js'];
   function muatSatu(src) {
     return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Gagal memuat ' + src)); document.head.appendChild(s); });
   }
@@ -18,7 +18,8 @@
   const $ = s => document.querySelector(s);
   const pasang = (el, html) => window.HTML_AMAN.pasang(el, html);
   const MENU = [['ringkasan', '◆', 'Ringkasan Eksekutif'], ['grafik', '▤', 'Grafik & Risiko'], ['daftar', '☰', 'Daftar Somasi'], ['ocr', '⎙', 'Impor Scan (OCR)'],
-    ['impor', '⇪', 'Impor Excel & Cadangan'], ['laporan', '▣', 'Laporan Manajemen'], ['tata-kelola', '⚖', 'Tata Kelola & Jejak Audit'], ['pengaturan', '⚙', 'Pengaturan']];
+    ['impor', '⇪', 'Impor Excel & Cadangan'], ['laporan', '▣', 'Laporan Manajemen'], ['tata-kelola', '⚖', 'Tata Kelola & Jejak Audit'], ['pengaturan', '⚙', 'Pengaturan'],
+    ['panduan', '?', 'Panduan']];
   const st = { oleh: '', filter: { cari: '', status: '', tingkat: '', proyek: '' }, urut: { kol: 'saldo', naik: false }, imporBaris: null, lembar: [], galatImpor: [], antrian: [], ocrJalan: false, ocr: null, idleT: 0, blob: [], pulih: null, idlePasang: false };
   const data = () => S.sesi.data;
   const kini = () => D.hariIni();
@@ -185,6 +186,7 @@
     impor: () => pasang($('#isi'), T.impor(window.DRIVE.tersedia())),
     ocr: async () => { halamanOcr({ ada: false }); const lap = await window.OCR.statusLaptop(); if (lap.ada && location.hash === '#ocr') halamanOcr(lap); },
     laporan: () => pasang($('#isi'), T.laporan(data(), kini(), data().pengaturan.unit, st.oleh)),
+    panduan: () => pasang($('#isi'), window.PANDUAN.halaman()),
     'tata-kelola': async () => pasang($('#isi'), T.tataKelola(data(), await K.periksaJejak(data().jejak))),
     pengaturan: () => pasang($('#isi'), T.pengaturan(data().pengaturan, S.sesi.cloud ? 'Online: amplop terenkripsi disimpan di Firestore (dokumen brankas/utama, riwayat versi tak dapat diubah) dan salinan terenkripsi di perangkat ini.' : 'Perangkat ini: amplop terenkripsi disimpan di IndexedDB profil peramban ini. Unduh cadangan secara berkala.')),
   };
@@ -192,13 +194,21 @@
     const [hal, id] = location.hash.slice(1).split('/');
     if (hal === 'somasi' && id) { location.replace('#daftar'); bukaDetail(id); return; }
     const fn = HALAMAN[hal] ? hal : 'ringkasan';
+    aturTombolPanduan(fn);
     const m = MENU.find(x => x[0] === fn);
     $('#judul').textContent = m[2]; document.title = m[2] + ' · Monitoring Somasi';
     document.querySelectorAll('#nav a').forEach(a => a.setAttribute('aria-current', a.getAttribute('href') === '#' + fn ? 'page' : 'false'));
     $('#samping').classList.remove('buka');
     await HALAMAN[fn]();
     pasangGrafik();
-    $('#isi').focus({ preventScroll: true });
+    const bagian = fn === 'panduan' && id && $('#pd-' + id);
+    if (bagian) { bagian.scrollIntoView({ block: 'start' }); bagian.focus({ preventScroll: true }); } else $('#isi').focus({ preventScroll: true });
+  }
+  /** Tombol "? Panduan" di bilah atas membuka bagian panduan untuk halaman yang sedang dibuka. */
+  function aturTombolPanduan(fn) {
+    const b = $('#btn-panduan'), bag = window.PANDUAN.bagianUntuk(fn);
+    b.hidden = fn === 'panduan';
+    b.setAttribute('href', '#panduan' + (bag ? '/' + bag : ''));
   }
 
   function pasangGrafik() {
@@ -544,6 +554,20 @@
   document.addEventListener('submit', e => {
     const h = { 'form-ocr': simpanOcr, 'form-atur': simpanAtur, 'form-sandi': gantiSandi, 'form-pulih': kirimPulih }[e.target.id];
     if (h) Promise.resolve(h(e)).catch(x => alert(x.message || x));
+  });
+  // Seret-lepas ke panel upload: berkas diproses sama seperti tombol "Pilih dari perangkat".
+  ['dragenter', 'dragover'].forEach(ev => document.addEventListener(ev, e => {
+    const z = e.target.closest && e.target.closest('.unggah');
+    if (!z) return;
+    e.preventDefault(); z.classList.add('seret');
+  }));
+  document.addEventListener('dragleave', e => { const z = e.target.closest && e.target.closest('.unggah'); if (z && !z.contains(e.relatedTarget)) z.classList.remove('seret'); });
+  document.addEventListener('drop', e => {
+    const z = e.target.closest && e.target.closest('.unggah');
+    if (!z) return;
+    e.preventDefault(); z.classList.remove('seret');
+    const daftar = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+    if (daftar.length) (z.dataset.unggah === 'excel' ? bacaExcel : tambahAntrian)(daftar);
   });
   window.addEventListener('pagehide', () => { if (S.sesi.kunci) kunciSekarang('Brankas dikunci saat halaman ditutup.'); });
   window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });

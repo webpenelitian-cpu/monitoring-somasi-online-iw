@@ -114,14 +114,25 @@ window.TAMPIL = (function () {
       <div><h3 class="judul-orn">Riwayat tindak lanjut</h3>${tl}</div></div>`;
   }
 
-  const tombolDrive = (aksi, ada) => ada ? `<button type="button" class="btn biru" data-aksi="${aksi}">Pilih dari Google Drive</button>` :
-    '<span class="bantu">Ambil dari Google Drive tersedia di versi online setelah masuk dengan Google.</span>';
+  /** Panel upload: seret-lepas, pilih dari perangkat, atau Google Drive (versi online). */
+  function panelUnggah(o) {
+    const drive = o.drive ? `<button type="button" class="btn btn-drive" data-aksi="${o.aksiDrive}"><span class="ikon-drive" aria-hidden="true"></span>Pilih dari Google Drive</button>`
+      : '<span class="pil">Google Drive: tersedia di versi online setelah masuk</span>';
+    return `<div class="unggah" data-unggah="${o.jenis}">
+      <span class="unggah-ikon" aria-hidden="true">⇪</span>
+      <p class="unggah-judul">Seret &amp; lepas berkas di sini</p>
+      <p class="bantu">atau</p>
+      <div class="unggah-pilihan">
+        <label class="btn utama-btn btn-berkas">Pilih dari perangkat<input type="file" id="${o.id}" class="sr" multiple accept="${o.accept}"></label>
+        ${drive}
+      </div>
+      <p class="bantu">${o.ket}</p></div>`;
+  }
   function impor(drive) {
     return `<section class="kartu"><h2 class="judul-orn">Impor dari Excel</h2>
       <p>Pilih berkas .xlsx dari folder SOMASI (mis. <i>DAFTAR SOMASI MASUK.xlsx</i> atau <i>Somasi Tagihan Rekap Pervendor.xlsx</i>). Kolom dikenali dari judul kolom (Tgl Surat, Asal Surat, Nama Rekanan, Proyek, Nilai, Saldo, Pembayaran, Tindak Lanjut, Perihal, Disposisi, KET). Berkas dibaca di perangkat ini dan tidak diunggah.</p>
-      <div class="form"><label>Berkas Excel (boleh banyak sekaligus)<input type="file" id="berkas-xlsx" multiple accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
-      <div class="baris-btn">${tombolDrive('drive-excel', drive)}</div>
-      <label class="cek"><input type="checkbox" id="hanya-somasi" checked> Hanya baris yang memuat kata “somasi”</label></div>
+      ${panelUnggah({ jenis: 'excel', id: 'berkas-xlsx', accept: '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', drive, aksiDrive: 'drive-excel', ket: 'Excel .xlsx atau Google Sheets · banyak berkas digabung dalam satu pratinjau · maks. 25 berkas' })}
+      <label class="cek"><input type="checkbox" id="hanya-somasi" checked> Hanya baris yang memuat kata “somasi” (untuk lembar register tanpa kolom nilai)</label>
       <p class="bantu">Penggabungan aman: data yang sudah ada TIDAK ditimpa. Baris yang cocok (nomor agenda sama, atau nama rekanan sama) hanya mengisi kolom yang masih kosong dan menambah tindak lanjut baru.</p>
       <div id="impor-hasil"></div></section>
       <section class="kartu"><h2>Cadangan terenkripsi</h2><p>Unduh salinan brankas (tetap terenkripsi dengan kata sandi saat ini) atau pulihkan dari cadangan.</p>
@@ -149,8 +160,7 @@ window.TAMPIL = (function () {
     return `<section class="kartu"><h2 class="judul-orn">Impor dari scan surat (OCR)</h2>
       <p>Pilih scan surat somasi (PDF atau gambar). Teks dibaca beberapa mesin OCR, hasilnya diadu, lalu <b>Anda wajib mencocokkan setiap isian dengan dokumen asli</b> sebelum disimpan. Dokumen tidak dikirim ke luar perangkat.</p>
       <p><span class="pil ${lap.ada ? 'ok' : 'waspada'}">${lap.ada ? 'Mesin laptop aktif: ' + esc((lap.mesin || []).join(' · ')) : 'Mesin peramban (tesseract.js). Untuk akurasi tertinggi buka lewat pintasan desktop “Monitoring Somasi”.'}</span></p>
-      <div class="form"><label>Berkas scan (boleh banyak sekaligus, maks. 25)<input type="file" id="berkas-scan" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,application/pdf,image/*"></label>
-      <div class="baris-btn">${tombolDrive('drive-scan', drive)}</div></div>
+      ${panelUnggah({ jenis: 'scan', id: 'berkas-scan', accept: '.pdf,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,application/pdf,image/*', drive, aksiDrive: 'drive-scan', ket: 'PDF, JPG, PNG · maks. 25 berkas sekaligus, 25 MB per berkas · dibaca satu per satu, diverifikasi satu per satu' })}
       <div id="ocr-kabar" role="status" aria-live="polite"></div></section>
       <section class="kartu" id="ocr-antrian" hidden></section>
       <div id="ocr-hasil"></div>`;
@@ -199,18 +209,19 @@ window.TAMPIL = (function () {
     const akt = data.somasi.filter(D.aktif).sort((a, b) => D.saldoTerbuka(b) - D.saldoTerbuka(a));
     return `<div class="baris-btn tanpa-cetak"><button type="button" class="btn utama-btn" data-aksi="cetak">Cetak / simpan PDF</button><span class="bantu">Gunakan “Simpan sebagai PDF” di dialog cetak. Laporan berlabel RAHASIA.</span></div>
     <section class="kartu sampul"><p><span class="rahasia">RAHASIA · HANYA UNTUK MANAJEMEN</span></p>
-      <div class="merek"><span class="bola" aria-hidden="true">${esc(ID().logo || 'MS')}</span><div><b>${esc(ID().perusahaan || 'Laporan internal')}</b><small>${esc(unit || 'Unit pelapor')}</small></div></div>
+      <div class="merek"><span class="bola" aria-hidden="true">${esc(ID().logo || 'MS')}</span><div><b>${esc(ID().perusahaan || 'Laporan internal')}</b>${unit ? `<small>${esc(unit)}</small>` : ''}</div></div>
       <h2 class="judul-orn">Laporan Monitoring Somasi</h2><p>Posisi per ${esc(D.tglPanjang(kini))}. Disusun oleh ${esc(oleh || '-')} dari aplikasi Monitoring Somasi.</p>
       ${kpi(s)}
       <h3>Ringkasan eksekutif</h3><div class="narasi">${D.narasi(data.somasi, kini).map(p => `<p>${esc(p)}</p>`).join('')}</div>
       <h3>Rekomendasi</h3>${daftarRekomendasi(D.rekomendasi(data.somasi, kini), 10)}</section>
-    <section class="kartu"><h2>Grafik utama</h2><div class="grid-2"><div><h3>Komposisi pembayaran</h3><div data-grafik="cincin"></div></div><div><h3>Matriks risiko</h3><div data-grafik="matriks"></div></div>
-      <div><h3>Saldo terbuka per proyek</h3><div data-grafik="proyek5"></div></div><div><h3>Saldo terbuka per tingkat</h3><div data-grafik="tingkat"></div></div></div></section>
+    <section class="kartu grafik-laporan"><h2>Grafik utama</h2><div class="grid-2"><div><h3>Komposisi pembayaran</h3><div data-grafik="cincin"></div></div><div><h3>Matriks risiko</h3><div data-grafik="matriks"></div></div></div>
+      <h3>Saldo terbuka per proyek (5 terbesar)</h3><div class="grafik-lebar" data-grafik="proyek5"></div>
+      <h3>Saldo terbuka per tingkat</h3><div class="grafik-lebar" data-grafik="tingkat"></div></section>
     <section class="kartu halaman-baru"><h2>Lampiran A · Somasi aktif (${akt.length})</h2>${tabelLampiran(akt, kini)}</section>
     <section class="kartu"><h2>Lampiran B · Dasar penilaian</h2><p>Risiko = kemungkinan eskalasi × dampak (rubrik di bawah, mengacu pada kerangka ISO 31000). Saldo terbuka = saldo tercatat, atau tuntutan − pembayaran bila saldo tidak tercatat. Angka bersumber dari data yang dicatat di aplikasi (impor Excel folder SOMASI, verifikasi OCR, dan pencatatan manual) dan dapat ditelusuri di jejak audit.</p>${rubrik()}</section>`;
   }
   function tabelLampiran(akt, kini) {
-    return `<div class="tabel-bungkus"><table><thead><tr><th>No</th><th>Rekanan</th><th>Proyek</th><th>Tingkat</th><th class="angka">Tuntutan</th><th class="angka">Dibayar</th><th class="angka">Saldo</th><th>Status / tindak lanjut terakhir</th><th>Risiko</th></tr></thead><tbody>
+    return `<div class="tabel-bungkus"><table class="tabel-lampiran"><thead><tr><th>No</th><th>Rekanan</th><th>Proyek</th><th>Tingkat</th><th class="angka">Tuntutan</th><th class="angka">Dibayar</th><th class="angka">Saldo</th><th>Status / tindak lanjut terakhir</th><th>Risiko</th></tr></thead><tbody>
       ${akt.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.rekanan || r.asalSurat)}</td><td>${esc(r.proyek)}</td><td>${esc(r.tingkat)}</td><td class="angka">${esc(D.rupiah(r.nilaiTuntutan))}</td><td class="angka">${esc(D.rupiah(r.dibayar))}</td><td class="angka">${esc(D.rupiah(D.saldoTerbuka(r)))}</td>
       <td>${esc(r.status)}${r.tindakLanjut.length ? '<br><small>' + esc(r.tindakLanjut[r.tindakLanjut.length - 1].uraian) + '</small>' : ''}</td><td>${lencanaRisiko(D.risiko(r, kini))}</td></tr>`).join('')}</tbody></table></div>`;
   }

@@ -149,6 +149,24 @@ td.angka, th.angka { text-align: right; white-space: nowrap; font-variant-numeri
 .legenda i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; }
 .legenda .l1 { background: var(--r1); } .legenda .l2 { background: var(--r2); } .legenda .l3 { background: var(--r3); } .legenda .l4 { background: var(--r4); }
 
+/* ---------- panel upload */
+.unggah { border: 2px dashed var(--garis); border-radius: 12px; padding: 22px 18px; text-align: center; background: var(--abu-1); display: grid; justify-items: center; gap: 6px; margin: 10px 0 12px; transition: border-color .15s, background .15s; }
+.unggah.seret { border-color: var(--merah); background: var(--merah-muda); }
+.unggah-ikon { font-size: 30px; line-height: 1; color: var(--merah-teks); }
+.unggah-judul { margin: 0; font-weight: 600; }
+.unggah .bantu { margin: 0; }
+.unggah-pilihan { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; margin: 4px 0; }
+.btn-berkas { position: relative; }
+.btn-berkas:focus-within { outline: 3px solid var(--merah); outline-offset: 2px; }
+.btn-drive { background: var(--kartu); border: 1px solid var(--garis); font-weight: 600; }
+.btn-drive:hover { border-color: var(--biru); }
+.ikon-drive { width: 18px; height: 16px; flex: none; background: conic-gradient(from 210deg, #0F9D58 0 120deg, #F4B400 0 240deg, #4285F4 0); clip-path: polygon(50% 0, 100% 86%, 0 86%); border-radius: 2px; }
+.daftar-panduan { columns: 2; padding-left: 18px; margin: 6px 0 0; }
+.daftar-panduan li { margin: 3px 0; break-inside: avoid; }
+.panduan ol, .panduan ul { padding-left: 20px; }
+.panduan li { margin: 4px 0; }
+.panduan:focus { outline: none; }
+
 /* ---------- OCR */
 .ocr-tata { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
 .pratinjau { border: 1px solid var(--garis); border-radius: 10px; background: var(--abu-1); max-height: 78vh; overflow: auto; }
@@ -179,6 +197,7 @@ dialog .kaki-d { display: flex; gap: 8px; justify-content: flex-end; padding: 12
 @media (max-width: 980px) {
   .grid-2, .grid-3, .ocr-tata { grid-template-columns: 1fr; }
   .saring { grid-template-columns: 1fr 1fr; }
+  .daftar-panduan { columns: 1; }
 }
 @media (max-width: 760px) {
   .app { grid-template-columns: 1fr; }
