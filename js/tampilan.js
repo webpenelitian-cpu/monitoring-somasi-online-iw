@@ -114,10 +114,13 @@ window.TAMPIL = (function () {
       <div><h3 class="judul-orn">Riwayat tindak lanjut</h3>${tl}</div></div>`;
   }
 
-  function impor() {
+  const tombolDrive = (aksi, ada) => ada ? `<button type="button" class="btn biru" data-aksi="${aksi}">Pilih dari Google Drive</button>` :
+    '<span class="bantu">Ambil dari Google Drive tersedia di versi online setelah masuk dengan Google.</span>';
+  function impor(drive) {
     return `<section class="kartu"><h2 class="judul-orn">Impor dari Excel</h2>
       <p>Pilih berkas .xlsx dari folder SOMASI (mis. <i>DAFTAR SOMASI MASUK.xlsx</i> atau <i>Somasi Tagihan Rekap Pervendor.xlsx</i>). Kolom dikenali dari judul kolom (Tgl Surat, Asal Surat, Nama Rekanan, Proyek, Nilai, Saldo, Pembayaran, Tindak Lanjut, Perihal, Disposisi, KET). Berkas dibaca di perangkat ini dan tidak diunggah.</p>
-      <div class="form"><label>Berkas Excel<input type="file" id="berkas-xlsx" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+      <div class="form"><label>Berkas Excel (boleh banyak sekaligus)<input type="file" id="berkas-xlsx" multiple accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+      <div class="baris-btn">${tombolDrive('drive-excel', drive)}</div>
       <label class="cek"><input type="checkbox" id="hanya-somasi" checked> Hanya baris yang memuat kata “somasi”</label></div>
       <p class="bantu">Penggabungan aman: data yang sudah ada TIDAK ditimpa. Baris yang cocok (nomor agenda sama, atau nama rekanan sama) hanya mengisi kolom yang masih kosong dan menambah tindak lanjut baru.</p>
       <div id="impor-hasil"></div></section>
@@ -142,13 +145,32 @@ window.TAMPIL = (function () {
       </tbody></table></div><p class="baris-btn"><button type="button" class="btn utama-btn" data-aksi="impor-terapkan"${ubah ? '' : ' disabled'}>Terapkan ${ubah} perubahan</button><button type="button" class="btn" data-aksi="impor-batal">Batal</button></p>`;
   }
 
-  function ocr(lap) {
+  function ocr(lap, drive) {
     return `<section class="kartu"><h2 class="judul-orn">Impor dari scan surat (OCR)</h2>
       <p>Pilih scan surat somasi (PDF atau gambar). Teks dibaca beberapa mesin OCR, hasilnya diadu, lalu <b>Anda wajib mencocokkan setiap isian dengan dokumen asli</b> sebelum disimpan. Dokumen tidak dikirim ke luar perangkat.</p>
       <p><span class="pil ${lap.ada ? 'ok' : 'waspada'}">${lap.ada ? 'Mesin laptop aktif: ' + esc((lap.mesin || []).join(' · ')) : 'Mesin peramban (tesseract.js). Untuk akurasi tertinggi buka lewat pintasan desktop “Monitoring Somasi”.'}</span></p>
-      <label>Berkas scan<input type="file" id="berkas-scan" accept=".pdf,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,application/pdf,image/*"></label>
+      <div class="form"><label>Berkas scan (boleh banyak sekaligus, maks. 25)<input type="file" id="berkas-scan" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,application/pdf,image/*"></label>
+      <div class="baris-btn">${tombolDrive('drive-scan', drive)}</div></div>
       <div id="ocr-kabar" role="status" aria-live="polite"></div></section>
+      <section class="kartu" id="ocr-antrian" hidden></section>
       <div id="ocr-hasil"></div>`;
+  }
+
+  const LABEL_ANTRIAN = { menunggu: ['Menunggu', ''], dibaca: ['Sedang dibaca', 'r3'], siap: ['Siap diverifikasi', 'r2'], verifikasi: ['Sedang diverifikasi', 'r3'],
+    tersimpan: ['Tersimpan', 'r1'], dilewati: ['Dilewati', ''], gagal: ['Gagal dibaca', 'r4'] };
+  /** Panel antrean upload massal OCR: setiap berkas tetap diverifikasi satu per satu. */
+  function antrian(daftar, adaAktif) {
+    const n = s => daftar.filter(x => x.status === s).length;
+    const baris = daftar.map((x, i) => {
+      const [label, kelas] = LABEL_ANTRIAN[x.status] || [x.status, ''];
+      const aksi = x.status === 'siap' && !adaAktif ? `<button type="button" class="btn" data-aksi="antrian-verifikasi" data-id="${esc(x.id)}">Verifikasi</button>`
+        : x.status === 'tersimpan' && x.idSomasi ? `<a href="#somasi/${esc(x.idSomasi)}">Lihat</a>` : esc(x.galat || '');
+      return `<tr><td>${i + 1}</td><td>${esc(x.nama)}</td><td><span class="lencana ${kelas}">${esc(label)}</span></td><td>${aksi}</td></tr>`;
+    }).join('');
+    return `<h2>Antrean upload (${daftar.length} berkas)</h2>
+      <p class="bantu" role="status">${n('tersimpan')} tersimpan · ${n('siap') + n('verifikasi')} menunggu verifikasi · ${n('menunggu') + n('dibaca')} belum dibaca · ${n('dilewati')} dilewati · ${n('gagal')} gagal</p>
+      <div class="tabel-bungkus"><table><thead><tr><th>No</th><th>Berkas</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${baris}</tbody></table></div>
+      <p class="baris-btn"><button type="button" class="btn" data-aksi="antrian-bersihkan">Bersihkan yang selesai</button></p>`;
   }
 
   const LABEL_OCR = { rekanan: 'Rekanan / kreditur', noSurat: 'Nomor surat', tglSurat: 'Tanggal surat', perihal: 'Perihal', proyek: 'Proyek', tingkat: 'Tingkat', nilaiTuntutan: 'Nilai tuntutan (Rp)', tenggatHari: 'Tenggat (hari sejak diterima)' };
@@ -242,5 +264,5 @@ window.TAMPIL = (function () {
       <section class="kartu"><h2>Mode penyimpanan</h2><p>${esc(mode)}</p></section>`;
   }
 
-  return Object.freeze({ esc, ringkasan, grafik, daftar, tabelDaftar, formSomasi, detail, impor, pratinjauImpor, ocr, hasilOcr, laporan, tataKelola, pengaturan });
+  return Object.freeze({ esc, antrian, ringkasan, grafik, daftar, tabelDaftar, formSomasi, detail, impor, pratinjauImpor, ocr, hasilOcr, laporan, tataKelola, pengaturan });
 })();

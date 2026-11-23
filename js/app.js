@@ -6,7 +6,7 @@
   const S = window.SIMPAN, K = window.KRIPTO;
   // Modul isi aplikasi dimuat setelah layar kunci tampil (saat kolom sandi difokus / formulir dikirim), agar layar kunci ringan.
   let D = window.DATA, T = window.TAMPIL, janjiModul = null;
-  const MODUL = ['js/data.js', 'js/xlsx.js', 'js/ekstrak.js', 'js/ocr.js', 'js/grafik.js', 'js/tampilan.js'];
+  const MODUL = ['js/data.js', 'js/xlsx.js', 'js/ekstrak.js', 'js/ocr.js', 'js/drive.js', 'js/grafik.js', 'js/tampilan.js'];
   function muatSatu(src) {
     return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Gagal memuat ' + src)); document.head.appendChild(s); });
   }
@@ -19,7 +19,7 @@
   const pasang = (el, html) => window.HTML_AMAN.pasang(el, html);
   const MENU = [['ringkasan', '◆', 'Ringkasan Eksekutif'], ['grafik', '▤', 'Grafik & Risiko'], ['daftar', '☰', 'Daftar Somasi'], ['ocr', '⎙', 'Impor Scan (OCR)'],
     ['impor', '⇪', 'Impor Excel & Cadangan'], ['laporan', '▣', 'Laporan Manajemen'], ['tata-kelola', '⚖', 'Tata Kelola & Jejak Audit'], ['pengaturan', '⚙', 'Pengaturan']];
-  const st = { oleh: '', filter: { cari: '', status: '', tingkat: '', proyek: '' }, urut: { kol: 'saldo', naik: false }, imporBaris: null, lembar: [], ocr: null, idleT: 0, blob: [], pulih: null, idlePasang: false };
+  const st = { oleh: '', filter: { cari: '', status: '', tingkat: '', proyek: '' }, urut: { kol: 'saldo', naik: false }, imporBaris: null, lembar: [], galatImpor: [], antrian: [], ocrJalan: false, ocr: null, idleT: 0, blob: [], pulih: null, idlePasang: false };
   const data = () => S.sesi.data;
   const kini = () => D.hariIni();
 
@@ -132,7 +132,7 @@
   }
 
   function kunciSekarang(alasan) {
-    S.kunciSesi(); st.ocr = null; st.imporBaris = null; st.lembar = []; st.pulih = null; st.filter = { cari: '', status: '', tingkat: '', proyek: '' };
+    S.kunciSesi(); st.ocr = null; st.imporBaris = null; st.lembar = []; st.galatImpor = []; st.antrian = []; st.pulih = null; st.filter = { cari: '', status: '', tingkat: '', proyek: '' };
     clearTimeout(st.idleT);
     st.blob.forEach(u => URL.revokeObjectURL(u)); st.blob = [];
     if ($('#dlg').open) $('#dlg').close();
@@ -182,8 +182,8 @@
     ringkasan: () => pasang($('#isi'), T.ringkasan(data(), kini())),
     grafik: () => pasang($('#isi'), T.grafik()),
     daftar: () => { pasang($('#isi'), T.daftar(data(), st.filter)); isiTabel(); },
-    impor: () => pasang($('#isi'), T.impor()),
-    ocr: async () => { pasang($('#isi'), T.ocr({ ada: false })); const lap = await window.OCR.statusLaptop(); if (lap.ada && location.hash === '#ocr') pasang($('#isi'), T.ocr(lap)); },
+    impor: () => pasang($('#isi'), T.impor(window.DRIVE.tersedia())),
+    ocr: async () => { halamanOcr({ ada: false }); const lap = await window.OCR.statusLaptop(); if (lap.ada && location.hash === '#ocr') halamanOcr(lap); },
     laporan: () => pasang($('#isi'), T.laporan(data(), kini(), data().pengaturan.unit, st.oleh)),
     'tata-kelola': async () => pasang($('#isi'), T.tataKelola(data(), await K.periksaJejak(data().jejak))),
     pengaturan: () => pasang($('#isi'), T.pengaturan(data().pengaturan, S.sesi.cloud ? 'Online: amplop terenkripsi disimpan di Firestore (dokumen brankas/utama, riwayat versi tak dapat diubah) dan salinan terenkripsi di perangkat ini.' : 'Perangkat ini: amplop terenkripsi disimpan di IndexedDB profil peramban ini. Unduh cadangan secara berkala.')),
@@ -298,24 +298,32 @@
   }
 
   // ------------------------------------------------------------------ impor excel
-  async function bacaExcel(berkas) {
-    const hasil = $('#impor-hasil');
-    pasang(hasil, '<p class="pesan info" role="status">Membaca berkas…</p>');
-    try {
-      const lembar = await window.XLSX_MINI.baca(await berkas.arrayBuffer());
-      const hanya = $('#hanya-somasi').checked;
-      // Lembar berkolom nilai (mis. PAPARAN DIREKSI) dipakai secara bawaan; register surat campuran tanpa nilai harus dipilih sendiri.
-      st.lembar = lembar.map(l => Object.assign({ nama: l.nama }, D.dariTabel(l.rows, `Excel: ${berkas.name} › ${l.nama}`, hanya)))
-        .filter(l => l.catatan.length).map(l => Object.assign(l, { pakai: l.adaNilai }));
-      if (st.lembar.length && !st.lembar.some(l => l.pakai)) st.lembar.forEach(l => { l.pakai = true; });
-      tampilRencana();
-    } catch (e) { pasang(hasil, `<p class="pesan galat" role="alert">${T.esc(e.message || e)}</p>`); }
+  const MAKS_MASSAL = 25;
+  /** Upload massal Excel: semua berkas digabung dalam SATU pratinjau (pencocokan antarbaris berlaku lintas berkas). */
+  async function bacaExcel(daftar) {
+    daftar = Array.from(daftar).slice(0, MAKS_MASSAL);
+    pasang($('#impor-hasil'), `<p class="pesan info" role="status">Membaca ${daftar.length} berkas…</p>`);
+    const hanya = $('#hanya-somasi').checked;
+    st.lembar = []; st.galatImpor = [];
+    for (const berkas of daftar) {
+      try { st.lembar.push(...await lembarDari(berkas, hanya)); } catch (e) { st.galatImpor.push(`${berkas.name}: ${e.message || e}`); }
+    }
+    // Lembar berkolom nilai (mis. PAPARAN DIREKSI) dipakai secara bawaan; register surat campuran tanpa nilai harus dipilih sendiri.
+    if (st.lembar.length && !st.lembar.some(l => l.pakai)) st.lembar.forEach(l => { l.pakai = true; });
+    tampilRencana();
+  }
+  async function lembarDari(berkas, hanya) {
+    if (!/\.xlsx$/i.test(berkas.name)) throw new Error('bukan berkas .xlsx');
+    const lembar = await window.XLSX_MINI.baca(await berkas.arrayBuffer());
+    return lembar.map(l => Object.assign({ nama: `${berkas.name} › ${l.nama}` }, D.dariTabel(l.rows, `Excel: ${berkas.name} › ${l.nama}`, hanya)))
+      .filter(l => l.catatan.length).map(l => Object.assign(l, { pakai: l.adaNilai }));
   }
   function tampilRencana() {
     const salin = data().somasi.map(r => D.normal(JSON.parse(JSON.stringify(r)))), baris = [];
     for (const l of st.lembar.filter(x => x.pakai)) for (const r of l.catatan) baris.push(rencanaImpor(salin, r));
     st.imporBaris = baris;
-    pasang($('#impor-hasil'), st.lembar.length ? T.pratinjauImpor(baris, st.lembar) : '<p class="pesan galat" role="alert">Tidak ada baris yang dikenali. Pastikan ada judul kolom seperti “Nama Rekanan”/“Rekanan”, “Proyek”, “Nilai”.</p>');
+    const galat = st.galatImpor.length ? `<p class="pesan galat" role="alert">Dilewati: ${st.galatImpor.map(T.esc).join('; ')}</p>` : '';
+    pasang($('#impor-hasil'), galat + (st.lembar.length ? T.pratinjauImpor(baris, st.lembar) : '<p class="pesan galat" role="alert">Tidak ada baris yang dikenali. Pastikan ada judul kolom seperti “Nama Rekanan”/“Rekanan”, “Proyek”, “Nilai”.</p>'));
   }
   const salinan = r => D.normal(JSON.parse(JSON.stringify(r)));
   /** Rencana per baris dihitung terhadap salinan, agar baris kembar dalam satu berkas juga tergabung. */
@@ -382,16 +390,72 @@
   }
 
   // ------------------------------------------------------------------ OCR
-  async function jalankanOcr(berkas) {
-    const kabar = t => pasang($('#ocr-kabar'), `<p>${T.esc(t)}</p><div class="kemajuan"><i></i></div>`);
-    pasang($('#ocr-hasil'), '');
+  // Upload massal OCR: berkas masuk antrean, dibaca satu per satu di latar, lalu diverifikasi manusia SATU PER SATU.
+  function kabarOcr(t, kelas) {
+    const el = $('#ocr-kabar');
+    if (el) pasang(el, t ? (kelas ? `<p class="pesan ${kelas}" role="alert">${T.esc(t)}</p>` : `<p>${T.esc(t)}</p><div class="kemajuan"><i></i></div>`) : '');
+  }
+  function renderAntrian() {
+    const el = $('#ocr-antrian');
+    if (!el) return;
+    el.hidden = !st.antrian.length;
+    pasang(el, st.antrian.length ? T.antrian(st.antrian, !!st.ocr) : '');
+  }
+  function halamanOcr(lap) {
+    pasang($('#isi'), T.ocr(lap, window.DRIVE.tersedia()));
+    renderAntrian();
+    if (st.ocr) tampilVerifikasi(st.ocr.item);
+  }
+  function tambahAntrian(berkas) {
+    const sisa = MAKS_MASSAL - st.antrian.filter(x => !['tersimpan', 'dilewati', 'gagal'].includes(x.status)).length;
+    const masuk = Array.from(berkas).slice(0, Math.max(0, sisa));
+    masuk.forEach(b => st.antrian.push({ id: D.idBaru(), nama: b.name, berkas: b, status: 'menunggu', h: null, galat: '' }));
+    if (berkas.length > masuk.length) kabarOcr(`Antrean penuh: ${berkas.length - masuk.length} berkas tidak dimasukkan (maks. ${MAKS_MASSAL} sekaligus).`, 'galat');
+    renderAntrian();
+    prosesAntrian();
+  }
+  async function prosesAntrian() {
+    if (st.ocrJalan) return;
+    st.ocrJalan = true;
     try {
-      const h = await window.OCR.baca(berkas, kabar);
-      st.ocr = { h, berkas };
-      pasang($('#ocr-kabar'), '<p class="pesan ok">Selesai dibaca. Periksa setiap isian terhadap dokumen di sebelah kiri.</p>');
-      pasang($('#ocr-hasil'), T.hasilOcr(h, berkas.name));
-      await pratinjau(berkas);
-    } catch (e) { pasang($('#ocr-kabar'), `<p class="pesan galat" role="alert">OCR gagal: ${T.esc(e.message || e)}</p>`); }
+      for (let x = st.antrian.find(a => a.status === 'menunggu'); x; x = st.antrian.find(a => a.status === 'menunggu')) {
+        x.status = 'dibaca'; renderAntrian();
+        try { x.h = await window.OCR.baca(x.berkas, t => kabarOcr(`${x.nama}: ${t}`)); x.status = 'siap'; } catch (e) { x.status = 'gagal'; x.galat = e.message || String(e); }
+        if (!S.sesi.kunci) return;   // brankas dikunci saat OCR berjalan: antrean sudah dikosongkan
+        renderAntrian();
+        if (!st.ocr) tampilBerikut();
+      }
+    } finally { st.ocrJalan = false; if (!st.ocr) kabarOcr(''); }
+  }
+  function tampilBerikut() {
+    const x = st.antrian.find(a => a.status === 'siap');
+    if (x) tampilVerifikasi(x);
+    else if (!st.antrian.some(a => ['menunggu', 'dibaca'].includes(a.status))) renderAntrian();
+  }
+  async function tampilVerifikasi(x) {
+    if (!x || !$('#ocr-hasil')) return;
+    st.ocr = { h: x.h, berkas: x.berkas, item: x };
+    x.status = 'verifikasi';
+    kabarOcr(`Verifikasi: ${x.nama}. Periksa setiap isian terhadap dokumen di sebelah kiri.`, 'info');
+    pasang($('#ocr-hasil'), T.hasilOcr(x.h, x.nama));
+    renderAntrian();
+    try { await pratinjau(x.berkas); } catch { /* pratinjau gagal tidak menghalangi verifikasi */ }
+  }
+  function lewatiOcr() {
+    if (st.ocr && st.ocr.item) st.ocr.item.status = 'dilewati';
+    st.ocr = null; pasang($('#ocr-hasil'), ''); kabarOcr('');
+    tampilBerikut(); renderAntrian();
+  }
+  /** Tombol Google Drive: token diminta langsung di dalam klik (jendela izin Google), lalu Picker, lalu unduh. */
+  function ambilDrive(jenis) {
+    const kabar = jenis === 'excel' ? t => pasang($('#impor-hasil'), t ? `<p class="pesan info" role="status">${T.esc(t)}</p>` : '') : t => kabarOcr(t);
+    return window.DRIVE.ambil(jenis, kabar).then(berkas => {
+      if (!berkas.length) { kabar(''); return null; }
+      return jenis === 'excel' ? bacaExcel(berkas) : tambahAntrian(berkas);
+    }).catch(e => {
+      const pesan = /popup-blocked/.test(e && e.code) ? 'Jendela izin Google diblokir. Izinkan pop-up untuk situs ini.' : (e && e.message) || String(e);
+      if (jenis === 'excel') pasang($('#impor-hasil'), `<p class="pesan galat" role="alert">Google Drive: ${T.esc(pesan)}</p>`); else kabarOcr('Google Drive: ' + pesan, 'galat');
+    });
   }
   async function pratinjau(berkas) {
     const tempat = $('#ocr-pratinjau');
@@ -417,9 +481,12 @@
       nilaiTuntutan: D.angka(f.nilaiTuntutan), tenggat, sumber: `OCR ${h.jalur}: ${st.ocr.berkas.name} · sha256 ${h.sha256}`,
       tindakLanjut: [{ tgl: f.tglTerima, uraian: 'Somasi diterima dan dicatat dari scan (OCR terverifikasi manusia)', noSurat: f.noSurat }] });
     data().somasi.push(r);
+    st.ocr.item.status = 'tersimpan'; st.ocr.item.idSomasi = r.id; st.ocr.item.berkas = null; st.ocr.item.h = null;
     await catat('tambah-ocr', r.id, `${r.rekanan}: ${r.tingkat} ${D.rupiah(r.nilaiTuntutan)} dari scan ${st.ocr.berkas.name}; diverifikasi ${st.oleh}; mesin: ${h.suara.mesin.join(', ')}${tidakSepakat.length ? '; dikoreksi/diperiksa manual: ' + tidakSepakat.join(', ') : ''}`);
     await simpanSekarang();
-    st.ocr = null; location.hash = '#somasi/' + r.id;
+    st.ocr = null; pasang($('#ocr-hasil'), '');
+    if (st.antrian.some(a => ['siap', 'menunggu', 'dibaca'].includes(a.status))) { tampilBerikut(); renderAntrian(); return; }
+    location.hash = '#somasi/' + r.id;
   }
 
   // ------------------------------------------------------------------ pengaturan
@@ -450,7 +517,10 @@
     ubah: b => { const r = data().somasi.find(x => x.id === b.dataset.id); if (r) bukaForm(r); },
     'simpan-somasi': b => simpanSomasi(b.dataset.id), hapus: b => hapusSomasi(b.dataset.id),
     'impor-terapkan': terapkanImpor, 'impor-batal': () => { st.imporBaris = null; st.lembar = []; pasang($('#impor-hasil'), ''); },
-    cadangan, cetak: () => window.print(), 'ocr-batal': () => { st.ocr = null; pasang($('#ocr-hasil'), ''); pasang($('#ocr-kabar'), ''); },
+    cadangan, cetak: () => window.print(), 'ocr-batal': lewatiOcr,
+    'drive-excel': () => ambilDrive('excel'), 'drive-scan': () => ambilDrive('scan'),
+    'antrian-verifikasi': b => { if (!st.ocr) tampilVerifikasi(st.antrian.find(x => x.id === b.dataset.id)); },
+    'antrian-bersihkan': () => { st.antrian = st.antrian.filter(x => !['tersimpan', 'dilewati', 'gagal'].includes(x.status)); renderAntrian(); },
   };
   async function unduhCSV() {
     if (!confirm('CSV berisi data RAHASIA tanpa enkripsi. Simpan hanya di lokasi yang aman. Lanjutkan?')) return;
@@ -464,11 +534,11 @@
   });
   document.addEventListener('change', e => {
     if (e.target.classList.contains('pilih-lembar')) { st.lembar[Number(e.target.dataset.i)].pakai = e.target.checked; tampilRencana(); return; }
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
-    if (e.target.id === 'berkas-xlsx') bacaExcel(f);
-    else if (e.target.id === 'berkas-cadangan') pulihkan(f);
-    else if (e.target.id === 'berkas-scan') jalankanOcr(f);
+    const daftar = Array.from((e.target.files) || []);
+    if (!daftar.length) return;
+    if (e.target.id === 'berkas-xlsx') bacaExcel(daftar);
+    else if (e.target.id === 'berkas-cadangan') pulihkan(daftar[0]);
+    else if (e.target.id === 'berkas-scan') tambahAntrian(daftar);
     e.target.value = '';
   });
   document.addEventListener('submit', e => {

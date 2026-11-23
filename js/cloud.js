@@ -45,6 +45,19 @@ window.CLOUD = (function () {
     });
   }
   async function keluar() { if (auth) await A.signOut(auth); user = null; }
+  /** Token akses Google untuk cakupan tambahan (mis. drive.file), lewat jendela izin Google akun yang sedang masuk.
+      Dibuka langsung di dalam klik (tanpa await sebelumnya). Token tidak disimpan di sini. */
+  function tokenDrive(cakupan) {
+    if (!auth || !auth.currentUser) return Promise.reject(new Error('Masuk dengan Google terlebih dahulu.'));
+    const p = new A.GoogleAuthProvider();
+    p.addScope(cakupan);
+    p.setCustomParameters({ login_hint: auth.currentUser.email || '' });
+    return A.reauthenticateWithPopup(auth.currentUser, p).then(r => {
+      const c = A.GoogleAuthProvider.credentialFromResult(r);
+      if (!c || !c.accessToken) throw new Error('Izin Google Drive tidak diberikan.');
+      return c.accessToken;
+    });
+  }
   /** Anggota bila ada anggota/{uid} atau anggota_email/{email huruf kecil}. */
   async function anggota() {
     const ada = async (kol, id) => { try { return (await F.getDoc(F.doc(db, kol, id))).exists(); } catch { return false; } };
@@ -71,5 +84,5 @@ window.CLOUD = (function () {
       return amplop.rev;
     });
   }
-  return Object.freeze({ aktif, init, masuk, email, masukGoogle, keluar, baca, tulis });
+  return Object.freeze({ aktif, init, masuk, email, masukGoogle, keluar, baca, tulis, tokenDrive });
 })();

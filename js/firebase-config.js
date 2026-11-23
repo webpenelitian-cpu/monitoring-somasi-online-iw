@@ -7,6 +7,7 @@ window.FIREBASE_CONFIG = Object.freeze({
   authDomain: 'monitoring-somasi-iw.firebaseapp.com',
   projectId: 'monitoring-somasi-iw',
   appId: '1:947391379921:web:9b03937397bd6a2dfbc8f0',
+  nomorProyek: '947391379921',   // App ID Google Picker (nomor proyek Google Cloud)
   recaptchaSiteKey: '',
   // Mode online hanya aktif di origin resmi ini (situs publik & server laptop); origin lain (uji, salinan) tetap lokal.
   asal: Object.freeze(['https://webpenelitian-cpu.github.io', 'http://127.0.0.1:8801']),
