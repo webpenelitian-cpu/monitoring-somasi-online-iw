@@ -73,7 +73,14 @@ window.SIMPAN = (function () {
   /** Versi tertinggi yang pernah dibuka di perangkat ini; versi lebih rendah = kemungkinan pemulihan ke data lama (rollback). */
   function cekMundur(rev) {
     let maks = 0;
-    try { maks = Number(localStorage.getItem('ms-rev-maks')) || 0; } catch { /* abaikan */ }
+    try {
+      const mentah = localStorage.getItem('ms-rev-maks');
+      if (mentah !== null && !/^\d+$/.test(mentah)) {
+        // Rusak ≠ tidak ada: simpan salinannya sebelum ditulis ulang, dan catat sebagai galat.
+        localStorage.setItem('ms-rev-maks.rusak-' + Date.now(), mentah.slice(0, 200));
+        console.error('ERROR penanda versi ms-rev-maks rusak; salinan disimpan, perlindungan rollback dimulai ulang dari versi ' + rev);
+      } else maks = Number(mentah) || 0;
+    } catch { /* localStorage tidak tersedia (mode privat) */ }
     if (rev > maks) try { localStorage.setItem('ms-rev-maks', String(rev)); } catch { /* abaikan */ }
     return rev < maks ? maks : 0;
   }
@@ -122,5 +129,5 @@ window.SIMPAN = (function () {
     return data;
   }
 
-  return Object.freeze({ sesi, adaBrankas, bukaBrankas, buatBrankas, simpan, gantiSandi, kunciSesi, ekspor, pulihkan, hapusLokal, bacaLokal });
+  return Object.freeze({ sesi, cekMundur, adaBrankas, bukaBrankas, buatBrankas, simpan, gantiSandi, kunciSesi, ekspor, pulihkan, hapusLokal, bacaLokal });
 })();

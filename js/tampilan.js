@@ -17,6 +17,7 @@ window.TAMPIL = (function () {
       <div class="merah"><span>Tingkat II / terakhir</span><b>${s.tinggi}</b><small>somasi aktif</small></div>
       <div class="merah"><span>Lewat tenggat</span><b>${s.lewat}</b><small>tanggapan belum dikirim</small></div>
       <div><span>Risiko tinggi</span><b>${s.risikoTinggi}</b><small>skor ≥ 10 (dari 25)</small></div>
+      <div class="kuning"><span>Perlu verifikasi</span><b>${s.perluVerifikasi}</b><small>data belum dipastikan</small></div>
     </section>`;
   }
 
@@ -68,7 +69,8 @@ window.TAMPIL = (function () {
       <div class="saring" role="search"><label>Cari<input type="search" id="f-cari" value="${esc(f.cari)}" placeholder="rekanan, proyek, nomor surat…"></label>
         <label>Status<select id="f-status">${opsi(['', ...D.STATUS], f.status, v => v || 'Semua')}</select></label>
         <label>Tingkat<select id="f-tingkat">${opsi(['', ...D.TINGKAT], f.tingkat, v => v || 'Semua')}</select></label>
-        <label>Proyek<select id="f-proyek">${opsi(['', ...proyek], f.proyek, v => v || 'Semua')}</select></label></div>
+        <label>Proyek<select id="f-proyek">${opsi(['', ...proyek], f.proyek, v => v || 'Semua')}</select></label>
+        <label>Verifikasi<select id="f-verifikasi">${opsi(['', 'perlu', 'sudah'], f.verifikasi || '', v => ({ '': 'Semua', perlu: 'Perlu verifikasi', sudah: 'Sudah terverifikasi' })[v])}</select></label></div>
       <div id="tabel-daftar"></div></section>`;
   }
 
@@ -76,8 +78,8 @@ window.TAMPIL = (function () {
   function tabelDaftar(baris, urut, kini) {
     const kepala = KOLOM_TABEL.map(([k, l, a]) => `<th${a ? ' class="angka"' : ''} aria-sort="${urut.kol === k ? (urut.naik ? 'ascending' : 'descending') : 'none'}"><button type="button" data-urut="${k}">${esc(l)}${urut.kol === k ? (urut.naik ? ' ▲' : ' ▼') : ''}</button></th>`).join('');
     const isi = baris.map(r => `<tr><td>${esc(D.tglPanjang(r.tglSurat))}</td><td><a href="#somasi/${esc(r.id)}">${esc(r.rekanan || r.asalSurat || '(tanpa nama)')}</a>${r.asalSurat && r.asalSurat !== r.rekanan ? `<br><small>${esc(r.asalSurat)}</small>` : ''}</td>
-      <td>${esc(r.proyek)}</td><td>${esc(r.tingkat)}</td><td class="angka">${esc(D.rupiah(r.nilaiTuntutan))}</td><td class="angka">${esc(D.rupiah(r.dibayar))}</td>
-      <td class="angka">${esc(D.rupiah(D.saldoTerbuka(r)))}</td><td><span class="lencana ${esc(r.status.split(' ')[0])}">${esc(r.status)}</span>${D.lewatTenggat(r, kini) ? ' <span class="lencana r4">lewat tenggat</span>' : ''}</td>
+      <td>${esc(r.proyek)}</td><td>${esc(r.tingkat)}${r.surat.length > 1 ? `<br><small>${r.surat.length} surat</small>` : ''}</td><td class="angka">${esc(D.rupiah(r.nilaiTuntutan))}</td><td class="angka">${esc(D.rupiah(r.dibayar))}</td>
+      <td class="angka">${esc(D.rupiah(D.saldoTerbuka(r)))}</td><td><span class="lencana ${esc(r.status.split(' ')[0])}">${esc(r.status)}</span>${D.lewatTenggat(r, kini) ? ' <span class="lencana r4">lewat tenggat</span>' : ''}${r.verifikasi ? ' <span class="lencana verif" title="' + esc(r.verifikasi) + '">perlu verifikasi</span>' : ''}</td>
       <td>${D.aktif(r) ? lencanaRisiko(D.risiko(r, kini)) : '—'}</td><td>${esc(r.pic)}</td></tr>`).join('');
     const total = baris.reduce((s, r) => s + D.saldoTerbuka(r), 0);
     return `<p class="bantu" role="status">${baris.length} somasi · saldo terbuka ${esc(D.rupiah(total))}</p>
@@ -98,6 +100,11 @@ window.TAMPIL = (function () {
       ${txt('pic', 'PIC')}<label>Posisi tagihan (Pedoman bag. 3)<select name="posisi">${opsi(Object.keys(D.POSISI), r.posisi, k => D.POSISI[k])}</select></label>
       ${skala('kemungkinan', 'Kemungkinan eskalasi (1–5)')}${skala('dampak', 'Dampak (1–5)')}
       <label class="lebar">Keterangan<textarea name="ket" maxlength="2000">${esc(r.ket)}</textarea></label>
+      <label class="lebar">Perlu verifikasi (kosongkan bila sudah dicek dengan dokumen asli)<textarea name="verifikasi" maxlength="1000" placeholder="mis. nilai di surat ke-2 berbeda dengan surat pertama">${esc(r.verifikasi)}</textarea></label>
+      <fieldset class="lebar"><legend>Tambah surat lanjutan (somasi berikutnya untuk utang yang sama)</legend><div class="form">
+        <label>Tanggal surat<input type="date" name="sl-tgl"></label><label>Nomor surat<input type="text" name="sl-no" maxlength="120"></label>
+        <label>Tingkat<select name="sl-tingkat">${opsi(D.TINGKAT, 'Somasi II')}</select></label><label>Nilai dituntut (Rp)<input type="text" inputmode="decimal" name="sl-nilai" placeholder="0"></label>
+        <label>Tenggat tanggapan<input type="date" name="sl-tenggat"></label></div></fieldset>
       <fieldset class="lebar"><legend>Tambah tindak lanjut</legend><div class="form"><label>Tanggal<input type="date" name="tl-tgl"></label><label>No. surat tanggapan<input type="text" name="tl-no" maxlength="120"></label><label class="lebar">Uraian<input type="text" name="tl-uraian" maxlength="600" placeholder="mis. Surat tanggapan & jadwal bayar dikirim"></label></div></fieldset>
       <p class="lebar bantu">Saldo tercatat kosong = tuntutan − dibayar. Risiko “Otomatis” memakai rubrik di halaman Tata Kelola.</p>
     </form>`;
@@ -106,12 +113,14 @@ window.TAMPIL = (function () {
   function detail(r, kini) {
     const ri = D.risiko(r, kini);
     const tl = r.tindakLanjut.length ? `<ol class="linimasa">${r.tindakLanjut.map(t => `<li><b>${esc(t.tgl ? D.tglPanjang(t.tgl) : 'Tanpa tanggal')}</b>${t.noSurat ? ` · <small>${esc(t.noSurat)}</small>` : ''}<br>${esc(t.uraian)}</li>`).join('')}</ol>` : '<p>Belum ada tindak lanjut tercatat.</p>';
+    const surat = r.surat.length ? `<ol class="linimasa">${r.surat.map((s, i) => `<li><b>Surat ${i + 1} · ${esc(s.tingkat)}</b> · ${esc(s.tgl ? D.tglPanjang(s.tgl) : 'tanpa tanggal')}${s.noSurat ? ` · <small>${esc(s.noSurat)}</small>` : ''}<br>${s.nilai ? 'Dituntut ' + esc(D.rupiah(s.nilai)) : ''}${s.tenggat ? ' · tenggat ' + esc(D.tglPanjang(s.tenggat)) : ''}${s.pengirim ? `<br><small>${esc(s.pengirim)}</small>` : ''}</li>`).join('')}</ol>` : '<p>Belum ada surat tercatat.</p>';
+    const verif = r.verifikasi ? `<div class="pesan verif-kotak" role="note"><b>Perlu verifikasi:</b> ${esc(r.verifikasi)}<p class="baris-btn"><button type="button" class="btn" data-aksi="tandai-terverifikasi" data-id="${esc(r.id)}">Tandai sudah diverifikasi</button></p></div>` : '';
     const baris = [['Pengirim', r.asalSurat], ['Proyek', r.proyek], ['Tingkat', r.tingkat], ['Perihal', r.perihal], ['Nomor surat', r.noSurat], ['No. agenda', r.noAgenda],
       ['Tanggal surat', D.tglPanjang(r.tglSurat)], ['Diterima', D.tglPanjang(r.tglTerima)], ['Tenggat tanggapan', D.tglPanjang(r.tenggat)], ['Nilai tuntutan', D.rupiah(r.nilaiTuntutan)],
       ['Dibayar', D.rupiah(r.dibayar)], ['Saldo terbuka', D.rupiah(D.saldoTerbuka(r))], ['Status', r.status], ['Disposisi', r.disposisi], ['PIC', r.pic], ['Posisi tagihan', D.POSISI[r.posisi]],
       ['Risiko', `${ri.level} (${ri.k}×${ri.d}${ri.manual ? ', manual' : ', otomatis'})`], ['Keterangan', r.ket], ['Sumber data', r.sumber]];
-    return `<div class="grid-2"><div class="tabel-bungkus"><table><tbody>${baris.filter(b => b[1] && b[1] !== '-').map(([k, v]) => `<tr><th scope="row">${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</tbody></table></div>
-      <div><h3 class="judul-orn">Riwayat tindak lanjut</h3>${tl}</div></div>`;
+    return `${verif}<div class="grid-2"><div class="tabel-bungkus"><table><tbody>${baris.filter(b => b[1] && b[1] !== '-').map(([k, v]) => `<tr><th scope="row">${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</tbody></table></div>
+      <div><h3 class="judul-orn">Riwayat surat masuk (${r.surat.length})</h3>${surat}<h3 class="judul-orn">Riwayat tindak lanjut perusahaan</h3>${tl}</div></div>`;
   }
 
   /** Panel upload: seret-lepas, pilih dari perangkat, atau Google Drive (versi online). */

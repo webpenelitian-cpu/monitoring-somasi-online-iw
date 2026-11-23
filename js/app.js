@@ -23,7 +23,7 @@
   const MENU = [['ringkasan', '◆', 'Ringkasan Eksekutif'], ['grafik', '▤', 'Grafik & Risiko'], ['daftar', '☰', 'Daftar Somasi'], ['ocr', '⎙', 'Impor Scan (OCR)'],
     ['impor', '⇪', 'Impor Excel & Cadangan'], ['laporan', '▣', 'Laporan Manajemen'], ['tata-kelola', '⚖', 'Tata Kelola & Jejak Audit'], ['pengaturan', '⚙', 'Pengaturan'],
     ['panduan', '?', 'Panduan']];
-  const st = { oleh: '', filter: { cari: '', status: '', tingkat: '', proyek: '' }, urut: { kol: 'saldo', naik: false }, imporBaris: null, lembar: [], galatImpor: [], antrian: [], ocrJalan: false, ocr: null, idleT: 0, blob: [], pulih: null, idlePasang: false };
+  const st = { oleh: '', filter: { cari: '', status: '', tingkat: '', proyek: '', verifikasi: '' }, urut: { kol: 'saldo', naik: false }, imporBaris: null, lembar: [], galatImpor: [], antrian: [], ocrJalan: false, ocr: null, idleT: 0, blob: [], pulih: null, idlePasang: false };
   const data = () => S.sesi.data;
   const kini = () => D.hariIni();
 
@@ -136,7 +136,7 @@
   }
 
   function kunciSekarang(alasan) {
-    S.kunciSesi(); st.ocr = null; st.imporBaris = null; st.lembar = []; st.galatImpor = []; st.antrian = []; st.pulih = null; st.filter = { cari: '', status: '', tingkat: '', proyek: '' };
+    S.kunciSesi(); st.ocr = null; st.imporBaris = null; st.lembar = []; st.galatImpor = []; st.antrian = []; st.pulih = null; st.filter = { cari: '', status: '', tingkat: '', proyek: '', verifikasi: '' };
     clearTimeout(st.idleT);
     st.blob.forEach(u => URL.revokeObjectURL(u)); st.blob = [];
     if ($('#dlg').open) $('#dlg').close();
@@ -235,6 +235,7 @@
     if (f.status && r.status !== f.status) return false;
     if (f.tingkat && r.tingkat !== f.tingkat) return false;
     if (f.proyek && r.proyek !== f.proyek) return false;
+    if (f.verifikasi && (f.verifikasi === 'perlu') !== !!r.verifikasi) return false;
     return !q || [r.rekanan, r.asalSurat, r.proyek, r.perihal, r.noSurat, r.noAgenda, r.pic].join(' ').toLowerCase().includes(q);
   }
   function nilaiUrut(r, k) {
@@ -252,7 +253,7 @@
     const t = $('#tabel-daftar'); if (t) pasang(t, T.tabelDaftar(baris, st.urut, kini()));
   }
   document.addEventListener('input', e => {
-    const m = { 'f-cari': 'cari', 'f-status': 'status', 'f-tingkat': 'tingkat', 'f-proyek': 'proyek' }[e.target.id];
+    const m = { 'f-cari': 'cari', 'f-status': 'status', 'f-tingkat': 'tingkat', 'f-proyek': 'proyek', 'f-verifikasi': 'verifikasi' }[e.target.id];
     if (m) { st.filter[m] = e.target.value; isiTabel(); }
   });
 
@@ -285,7 +286,14 @@
     const tetap = lama ? { id: lama.id, dibuat: lama.dibuat, tindakLanjut: lama.tindakLanjut.slice() } : { id: '', dibuat: '', tindakLanjut: [] };
     const r = D.normal(Object.assign({}, lama || {}, f, tetap, { diubah: new Date().toISOString() }));
     if (f['tl-uraian']) r.tindakLanjut.push({ tgl: D.tglSah(f['tl-tgl']) ? f['tl-tgl'] : D.hariIni(), uraian: f['tl-uraian'].slice(0, 600), noSurat: (f['tl-no'] || '').slice(0, 120) });
+    if (f['sl-tgl'] || f['sl-no']) tambahSuratLanjutan(r, f);
     return r;
+  }
+  /** Surat lanjutan dari formulir: masuk riwayat surat; nilai yang berbeda ditandai perlu verifikasi (tidak menimpa). */
+  function tambahSuratLanjutan(r, f) {
+    const nilai = D.angka(f['sl-nilai']);
+    D.gabungSurat(r, [{ tgl: f['sl-tgl'], noSurat: f['sl-no'], tingkat: f['sl-tingkat'], nilai, tenggat: f['sl-tenggat'], pengirim: r.asalSurat, sumber: 'dicatat manual' }]);
+    if (nilai && r.nilaiTuntutan && Math.round(nilai) !== Math.round(r.nilaiTuntutan)) D.tambahVerifikasi(r, `nilai surat ${f['sl-tgl'] || 'lanjutan'} (${D.rupiah(nilai)}) berbeda dari nilai tuntutan tercatat (${D.rupiah(r.nilaiTuntutan)})`);
   }
   async function simpanSomasi(id) {
     const form = $('#form-somasi'), f = bacaForm(form);
@@ -358,6 +366,7 @@
     const k = D.isiKosong(p, salinan(b.r));
     if (b.beda && b.beda.length) {
       p.ket = [p.ket, `[Impor ${D.hariIni()}] selisih dengan ${b.r.sumber}: ${b.beda.join('; ')} (tidak ditimpa)`].filter(Boolean).join(' · ').slice(0, 2000);
+      D.tambahVerifikasi(p, `selisih dengan sumber impor: ${b.beda.join('; ')}`);
       k.push('ket'); n.beda++;
     }
     if (!k.length) return null;
@@ -459,6 +468,15 @@
     st.ocr = null; pasang($('#ocr-hasil'), ''); kabarOcr('');
     tampilBerikut(); renderAntrian();
   }
+  async function tandaiTerverifikasi(b) {
+    const r = data().somasi.find(x => x.id === b.dataset.id);
+    if (!r || !confirm(`Tandai data ${r.rekanan || r.asalSurat} sudah dicocokkan dengan dokumen asli?`)) return;
+    const catatan = r.verifikasi;
+    r.verifikasi = ''; r.diubah = new Date().toISOString();
+    await catat('verifikasi-selesai', r.id, `${r.rekanan || r.asalSurat}: diverifikasi oleh ${st.oleh}. Catatan sebelumnya: ${catatan}`);
+    await simpanSekarang();
+    bukaDetail(r.id); if (location.hash === '#daftar') isiTabel();
+  }
   /** Tombol Google Drive: token diminta langsung di dalam klik (jendela izin Google), lalu Picker, lalu unduh. */
   function ambilDrive(jenis) {
     const kabar = jenis === 'excel' ? t => pasang($('#impor-hasil'), t ? `<p class="pesan info" role="status">${T.esc(t)}</p>` : '') : t => kabarOcr(t);
@@ -493,13 +511,25 @@
     const r = D.normal({ rekanan: f.rekanan, noSurat: f.noSurat, tglSurat: f.tglSurat, tglTerima: f.tglTerima, perihal: f.perihal, proyek: f.proyek, tingkat: f.tingkat,
       nilaiTuntutan: D.angka(f.nilaiTuntutan), tenggat, sumber: `OCR ${h.jalur}: ${st.ocr.berkas.name} · sha256 ${h.sha256}`,
       tindakLanjut: [{ tgl: f.tglTerima, uraian: 'Somasi diterima dan dicatat dari scan (OCR terverifikasi manusia)', noSurat: f.noSurat }] });
-    data().somasi.push(r);
-    st.ocr.item.status = 'tersimpan'; st.ocr.item.idSomasi = r.id; st.ocr.item.berkas = null; st.ocr.item.h = null;
-    await catat('tambah-ocr', r.id, `${r.rekanan}: ${r.tingkat} ${D.rupiah(r.nilaiTuntutan)} dari scan ${st.ocr.berkas.name}; diverifikasi ${st.oleh}; mesin: ${h.suara.mesin.join(', ')}${tidakSepakat.length ? '; dikoreksi/diperiksa manual: ' + tidakSepakat.join(', ') : ''}`);
+    const tujuan = simpanSuratOcr(r);
+    st.ocr.item.status = 'tersimpan'; st.ocr.item.idSomasi = tujuan.id; st.ocr.item.berkas = null; st.ocr.item.h = null;
+    await catat(tujuan === r ? 'tambah-ocr' : 'ocr-surat-lanjutan', tujuan.id, `${r.rekanan}: ${r.tingkat} ${D.rupiah(r.nilaiTuntutan)} dari scan ${st.ocr.berkas.name}; diverifikasi ${st.oleh}; mesin: ${h.suara.mesin.join(', ')}${tidakSepakat.length ? '; dikoreksi/diperiksa manual: ' + tidakSepakat.join(', ') : ''}`);
     await simpanSekarang();
     st.ocr = null; pasang($('#ocr-hasil'), '');
     if (st.antrian.some(a => ['siap', 'menunggu', 'dibaca'].includes(a.status))) { tampilBerikut(); renderAntrian(); return; }
-    location.hash = '#somasi/' + r.id;
+    location.hash = '#somasi/' + tujuan.id;
+  }
+  /** Surat hasil OCR: bila sudah ada perkara untuk utang yang sama (satu pasangan pasti), digabung sebagai surat lanjutan. */
+  function simpanSuratOcr(r) {
+    const p = D.cariPasangan(data().somasi, r);
+    if (!p) { data().somasi.push(r); return r; }
+    D.gabungSurat(p, r.surat);
+    p.tindakLanjut.push(...r.tindakLanjut);
+    if (r.nilaiTuntutan && p.nilaiTuntutan && Math.round(r.nilaiTuntutan) !== Math.round(p.nilaiTuntutan)) {
+      D.tambahVerifikasi(p, `nilai surat ${r.tglSurat || 'baru'} (${D.rupiah(r.nilaiTuntutan)}) berbeda dari nilai tuntutan tercatat (${D.rupiah(p.nilaiTuntutan)})`);
+    }
+    p.diubah = new Date().toISOString();
+    return p;
   }
 
   // ------------------------------------------------------------------ pengaturan
@@ -531,6 +561,7 @@
     'simpan-somasi': b => simpanSomasi(b.dataset.id), hapus: b => hapusSomasi(b.dataset.id),
     'impor-terapkan': terapkanImpor, 'impor-batal': () => { st.imporBaris = null; st.lembar = []; pasang($('#impor-hasil'), ''); },
     cadangan, cetak: () => window.print(), 'ocr-batal': lewatiOcr,
+    'tandai-terverifikasi': tandaiTerverifikasi,
     'drive-excel': () => ambilDrive('excel'), 'drive-scan': () => ambilDrive('scan'),
     'antrian-verifikasi': b => { if (!st.ocr) tampilVerifikasi(st.antrian.find(x => x.id === b.dataset.id)); },
     'antrian-bersihkan': () => { st.antrian = st.antrian.filter(x => !['tersimpan', 'dilewati', 'gagal'].includes(x.status)); renderAntrian(); },

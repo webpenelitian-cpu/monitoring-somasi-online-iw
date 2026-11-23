@@ -85,6 +85,7 @@ a { color: var(--merah-teks); }
 .kpi > div { background: var(--kartu); border: 1px solid var(--garis); border-radius: 12px; padding: 14px 16px; box-shadow: var(--bayang); border-top: 4px solid var(--biru); }
 .kpi > div.merah { border-top-color: var(--merah); }
 .kpi > div.hijau { border-top-color: var(--hijau); }
+.kpi > div.kuning { border-top-color: #E8A400; }
 .kpi span { display: block; font-size: 12.5px; color: var(--teks-2); }
 .kpi b { display: block; font-size: 24px; line-height: 1.25; margin-top: 2px; }
 .kpi small { color: var(--teks-2); font-size: 12px; }
@@ -113,7 +114,7 @@ input[type="checkbox"] { width: 18px; min-height: 18px; height: 18px; accent-col
 .pesan.info { background: var(--biru-muda); color: var(--teks); }
 .pesan.ok { background: var(--hijau-muda); color: var(--hijau); }
 .bantu { font-size: 12.5px; color: var(--teks-2); margin: 4px 0 0; }
-.saring { display: grid; grid-template-columns: 2fr repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+.saring { display: grid; grid-template-columns: 2fr repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
 
 /* ---------- tabel */
 .tabel-bungkus { overflow-x: auto; border: 1px solid var(--garis); border-radius: 10px; }
@@ -130,6 +131,8 @@ td.angka, th.angka { text-align: right; white-space: nowrap; font-variant-numeri
 .lencana.Selesai, .lencana.r1, .lencana.sepakat { background: var(--hijau-muda); color: var(--hijau); }
 .lencana.r3, .lencana.mayoritas, .lencana.tunggal { background: var(--kuning-muda); color: var(--kuning); }
 .lencana.r2 { background: var(--biru-muda); color: var(--teks); }
+.lencana.verif { background: var(--kuning-muda); color: var(--kuning); font-weight: 600; }
+.verif-kotak { background: var(--kuning-muda); color: var(--teks); border-left: 4px solid #E8A400; margin-bottom: 12px; }
 .lencana.kosong { background: var(--abu-2); color: var(--teks-2); }
 
 /* ---------- grafik */
