@@ -12,6 +12,13 @@ window.CLOUD = (function () {
   const aktif = () => lengkap() && Array.isArray(cfg.asal) && cfg.asal.includes(location.origin);
   const masuk = () => !!user;
   const email = () => (user && user.email) || '';
+  const uid = () => (user && user.uid) || '';
+  /** fn(uidBaru) dipanggil bila akun berganti/keluar (mis. di tab lain) — brankas yang terbuka harus dikunci. */
+  function pantauAkun(fn) {
+    if (!auth) return;
+    let awal = uid();
+    A.onAuthStateChanged(auth, u => { const baru = (u && u.uid) || ''; if (baru !== awal) { awal = baru; fn(baru); } });
+  }
 
   function init() {
     return siap || (siap = (async () => {
@@ -84,5 +91,5 @@ window.CLOUD = (function () {
       return amplop.rev;
     });
   }
-  return Object.freeze({ aktif, init, masuk, email, masukGoogle, keluar, baca, tulis, tokenDrive });
+  return Object.freeze({ aktif, init, masuk, email, uid, pantauAkun, masukGoogle, keluar, baca, tulis, tokenDrive });
 })();

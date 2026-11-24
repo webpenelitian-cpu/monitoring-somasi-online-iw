@@ -107,6 +107,7 @@
       try { localStorage.setItem('ms-nama', window.CLOUD.masuk() ? '' : nama); } catch { /* abaikan */ }
       await catat('buka-brankas', '', 'Brankas dibuka');
       await simpanSekarang();
+      await S.ingatKunci(window.CLOUD.uid(), nama);
       masukAplikasi();
     } catch (e) { galatKunci(e.message || String(e)); } finally {
       tombol.disabled = false; tombol.textContent = modeBuat ? 'Buat brankas' : 'Buka';
@@ -126,6 +127,7 @@
     pasang($('#nav'), MENU.map(([id, ik, l]) => `<li><a href="#${id}"><span aria-hidden="true">${ik}</span>${T.esc(l)}</a></li>`).join(''));
     $('#pil-mode').textContent = S.sesi.cloud ? 'Online · ' + window.CLOUD.email() : 'Perangkat ini';
     $('#pil-mode').className = 'pil ' + (S.sesi.cloud ? 'ok' : '');
+    $('#btn-keluar-akun').hidden = !window.CLOUD.masuk();
     terapkanIdentitas(data().pengaturan.identitas);
     $('#unit-label').textContent = labelUnit();
     $('#menit-kunci').textContent = data().pengaturan.kunciMenit;
@@ -135,8 +137,9 @@
     if (!location.hash || location.hash === '#') location.hash = '#ringkasan'; else tampil();
   }
 
-  function kunciSekarang(alasan) {
-    S.kunciSesi(); st.ocr = null; st.imporBaris = null; st.lembar = []; st.galatImpor = []; st.antrian = []; st.pulih = null; st.filter = { cari: '', status: '', tingkat: '', proyek: '', verifikasi: '' };
+  /** lupakan=false hanya untuk pagehide (refresh/tutup tab): data dihapus dari memori, kunci non-extractable tetap diingat. */
+  function kunciSekarang(alasan, lupakan = true) {
+    S.kunciSesi(lupakan); st.ocr = null; st.imporBaris = null; st.lembar = []; st.galatImpor = []; st.antrian = []; st.pulih = null; st.filter = { cari: '', status: '', tingkat: '', proyek: '', verifikasi: '' };
     clearTimeout(st.idleT);
     st.blob.forEach(u => URL.revokeObjectURL(u)); st.blob = [];
     if ($('#dlg').open) $('#dlg').close();
@@ -148,12 +151,31 @@
     $('#sandi').focus();
   }
   $('#btn-kunci').addEventListener('click', () => kunciSekarang('Brankas dikunci.'));
+  $('#btn-keluar-akun').addEventListener('click', async () => {
+    await S.lupakanKunci();
+    try { await window.CLOUD.keluar(); } catch { /* tetap dikunci */ }
+    kunciSekarang('Anda sudah keluar dari akun.');
+  });
+  /** Saat halaman dimuat: buka ulang brankas dengan kunci yang diingat (tanpa kata sandi), lalu pantau pergantian akun. */
+  async function mulai() {
+    await siapkanKunci();
+    if (window.CLOUD.aktif()) window.CLOUD.pantauAkun(() => { S.lupakanKunci(); if (S.sesi.kunci) kunciSekarang('Akun berubah atau keluar; brankas dikunci.'); });
+    try {
+      if (!(await S.adaIngat())) return;
+      await muatModul();   // DATA dkk. dibutuhkan untuk menormalkan isi brankas
+      const oleh = await S.pulihkanSesi(window.CLOUD.uid());
+      if (!oleh) return;
+      st.oleh = oleh;
+      masukAplikasi();
+    } catch (e) { S.kunciSesi(); galatKunci(e.message || String(e)); }
+  }
 
   // Kunci otomatis saat tidak aktif: kunci & data dihapus dari memori.
   function mulaiIdle() {
     const reset = () => {
       clearTimeout(st.idleT);
       if (!S.sesi.kunci) return;
+      S.sentuh();
       st.idleT = setTimeout(() => kunciSekarang('Dikunci otomatis karena tidak ada aktivitas.'), (data().pengaturan.kunciMenit || 10) * 60000);
     };
     if (!st.idlePasang) { ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(e => document.addEventListener(e, reset, { passive: true })); st.idlePasang = true; }
@@ -603,9 +625,9 @@
     const daftar = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
     if (daftar.length) (z.dataset.unggah === 'excel' ? bacaExcel : tambahAntrian)(daftar);
   });
-  window.addEventListener('pagehide', () => { if (S.sesi.kunci) kunciSekarang('Brankas dikunci saat halaman ditutup.'); });
+  window.addEventListener('pagehide', () => { if (S.sesi.kunci) kunciSekarang('Brankas dikunci saat halaman ditutup.', false); });
   window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
 
   ['focusin', 'pointerdown'].forEach(e => $('#form-kunci').addEventListener(e, () => { muatModul().catch(() => {}); }, { once: true }));
-  siapkanKunci();
+  mulai();
 })();

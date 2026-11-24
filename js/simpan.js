@@ -26,7 +26,50 @@ window.SIMPAN = (function () {
   }
   const bacaLokal = () => tx('readonly', s => s.get(KUNCI));
   const tulisLokal = amplop => tx('readwrite', s => s.put(amplop, KUNCI));
-  const hapusLokal = () => tx('readwrite', s => s.delete(KUNCI));
+  const hapusLokal = () => tx('readwrite', s => { s.delete(INGAT); return s.delete(KUNCI); });
+
+  /* Ingat kunci antar-refresh: yang disimpan hanya CryptoKey AES-GCM NON-EXTRACTABLE (hasil PBKDF2, extractable=false)
+     di IndexedDB — bahan mentah & kata sandi tidak pernah disimpan. Terikat ke origin + UID akun; kedaluwarsa setelah
+     menganggur BATAS_INGAT_MENIT (atau kunci otomatis brankas bila lebih pendek); dihapus saat "Kunci sekarang",
+     kunci otomatis, keluar akun, atau UID berbeda. */
+  const INGAT = 'sesi-kunci', BATAS_INGAT_MENIT = 30;
+  const bacaIngat = () => tx('readonly', s => s.get(INGAT));
+  const lupakanKunci = () => tx('readwrite', s => s.delete(INGAT)).catch(() => {});
+  let sentuhT = 0;
+  function ingatKunci(uid, oleh) {
+    const k = sesi.kunci;
+    if (!k || !(k.kunci instanceof CryptoKey) || k.kunci.extractable) return Promise.resolve();   // hanya kunci yang tidak bisa diekspor
+    sentuhT = Date.now();
+    return tx('readwrite', s => s.put({ kunci: k.kunci, garam: k.garam, iter: k.iter, uid: uid || '', asal: location.origin,
+      oleh: String(oleh || '').slice(0, 120), terakhir: sentuhT }, INGAT)).catch(() => {});
+  }
+  /** Tandai aktivitas (paling sering 1x/menit) agar batas menganggur dihitung dari aktivitas terakhir. */
+  function sentuh() {
+    if (!sesi.kunci || Date.now() - sentuhT < 60000) return;
+    sentuhT = Date.now();
+    tx('readwrite', s => { const g = s.get(INGAT); g.onsuccess = () => { if (g.result) s.put(Object.assign(g.result, { terakhir: sentuhT }), INGAT); }; }).catch(() => {});
+  }
+  /** Kunci yang diingat sah: CryptoKey non-extractable, origin & UID sama, belum menganggur lewat batas. */
+  const ingatSah = (r, uid, kini) => r.kunci instanceof CryptoKey && !r.kunci.extractable && r.asal === location.origin
+    && r.uid === (uid || '') && r.terakhir <= kini && kini - r.terakhir <= BATAS_INGAT_MENIT * 60000;
+  /** Ada kunci yang diingat (belum diperiksa keabsahannya). */
+  const adaIngat = () => bacaIngat().then(r => !!r, () => false);
+  /** Buka ulang brankas dari kunci yang diingat. -> nama pengguna (jejak audit) atau '' bila tidak bisa (kunci dihapus). */
+  async function pulihkanSesi(uid) {
+    let r;
+    try { r = await bacaIngat(); } catch { return ''; }
+    if (!r) return '';
+    const batal = async () => { await lupakanKunci(); return ''; }, kini = Date.now();
+    if (!ingatSah(r, uid, kini)) return batal();
+    try {
+      const amplop = await ambilAmplop();
+      if (!amplop || amplop.salt !== r.garam || amplop.iter !== r.iter) return batal();   // sandi diganti / brankas lain
+      const data = await bukaDengan({ kunci: r.kunci, garam: r.garam, iter: r.iter }, amplop);
+      if (kini - r.terakhir > data.pengaturan.kunciMenit * 60000) { kunciSesi(); return batal(); }
+    } catch { kunciSesi(); return batal(); }
+    sentuhT = 0; sentuh();
+    return r.oleh || 'Pengguna';
+  }
 
   /** Status sesi brankas (di memori saja). */
   const sesi = { kunci: null, data: null, rev: 0, cloud: false, mundur: 0, ukuran: 0 };
@@ -48,7 +91,9 @@ window.SIMPAN = (function () {
   async function bukaBrankas(sandi) {
     const amplop = await ambilAmplop();
     if (!amplop) throw new Error('Brankas belum dibuat.');
-    const k = await window.KRIPTO.kunciDariAmplop(sandi, amplop);
+    return bukaDengan(await window.KRIPTO.kunciDariAmplop(sandi, amplop), amplop);
+  }
+  async function bukaDengan(k, amplop) {
     const data = await window.KRIPTO.buka(k, amplop);
     if (!data || !Array.isArray(data.somasi) || !Array.isArray(data.jejak)) throw new Error('Isi brankas tidak dikenali.');
     data.somasi = data.somasi.map(window.DATA.normal);
@@ -112,9 +157,11 @@ window.SIMPAN = (function () {
     await window.KRIPTO.buka(await window.KRIPTO.kunciDariAmplop(lama, amplop), amplop);
     sesi.kunci = await window.KRIPTO.kunciBaru(baru);
     await simpan();
+    await lupakanKunci();   // kunci lama tidak berlaku lagi
   }
 
-  function kunciSesi() { sesi.kunci = null; sesi.data = null; sesi.rev = 0; sesi.mundur = 0; }
+  /** Kunci: hapus kunci & data dari memori. lupakan=true (default) juga menghapus kunci yang diingat (refresh minta sandi). */
+  function kunciSesi(lupakan = true) { sesi.kunci = null; sesi.data = null; sesi.rev = 0; sesi.mundur = 0; return lupakan ? lupakanKunci() : Promise.resolve(); }
   async function ekspor() { if (!sesi.kunci) throw new Error('Brankas terkunci.'); return window.KRIPTO.kunci(sesi.kunci, sesi.data, sesi.rev); }
 
   /** Pulihkan dari cadangan terenkripsi (perlu kata sandi cadangan). Menggantikan isi brankas yang terbuka. */
@@ -129,5 +176,5 @@ window.SIMPAN = (function () {
     return data;
   }
 
-  return Object.freeze({ sesi, cekMundur, adaBrankas, bukaBrankas, buatBrankas, simpan, gantiSandi, kunciSesi, ekspor, pulihkan, hapusLokal, bacaLokal });
+  return Object.freeze({ sesi, cekMundur, ingatKunci, sentuh, adaIngat, pulihkanSesi, lupakanKunci, BATAS_INGAT_MENIT, adaBrankas, bukaBrankas, buatBrankas, simpan, gantiSandi, kunciSesi, ekspor, pulihkan, hapusLokal, bacaLokal });
 })();
