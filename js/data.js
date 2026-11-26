@@ -54,11 +54,31 @@ window.DATA = (function () {
     o.posisi = pilihan(r.posisi, Object.keys(POSISI), '');
     o.kemungkinan = skala(r.kemungkinan); o.dampak = skala(r.dampak);
     o.tindakLanjut = Array.isArray(r.tindakLanjut) ? r.tindakLanjut.slice(0, 200).map(normalTL).filter(t => t.uraian) : [];
-    o.verifikasi = teks(r.verifikasi).slice(0, 1000);
+    o.verifikasi = teks(r.verifikasi).slice(0, BATAS_VERIF);
     o.surat = normalSurat(r.surat, o);
+    o.rincian = normalRincian(r.rincian);
     o.dibuat = teks(r.dibuat) || new Date().toISOString();
     o.diubah = teks(r.diubah) || new Date().toISOString();
     return o;
+  }
+  /* Rincian sumber: baris asli dari register sumber (mis. IRL, satu baris per invoice) disimpan utuh di brankas
+     terenkripsi; kolom Excel berawalan "Rincian: ". Tidak masuk Keterangan, CSV, laporan cetak, atau tebakan status. */
+  const RINCIAN_RE = /^\s*rincian\s*:\s*(.*)$/i;
+  function normalRincian(daftar) {
+    if (!Array.isArray(daftar)) return [];
+    return daftar.slice(0, 2000).filter(x => x && typeof x === 'object' && !Array.isArray(x)).map(x => {
+      const o = {};
+      for (const [k, v] of Object.entries(x).slice(0, 60)) if (teks(k)) o[teks(k).slice(0, 80)] = typeof v === 'number' && Number.isFinite(v) ? v : teks(v).slice(0, 1000);
+      return o;
+    }).filter(o => Object.keys(o).length);
+  }
+  const kunciRincian = x => JSON.stringify(Object.keys(x).sort().map(k => [k, x[k]]));
+  /** Nomor rekening/akun hanya ditampilkan 4 digit terakhir. */
+  const KOLOM_REKENING = /rekening|no\.? ?rek\b|account|akun bank/i;
+  function samarkan(kolom, v) {
+    if (!KOLOM_REKENING.test(teks(kolom))) return v;
+    // Satu sel bisa berisi beberapa rekening (dipisah ; , | atau baris baru): samarkan masing-masing.
+    return teks(v).split(/\s*[;,|\n]\s*/).filter(Boolean).map(x => { const d = x.replace(/\D/g, ''); return '••••' + d.slice(-4); }).join(' ; ');
   }
   /** Satu perkara = satu utang; setiap surat masuk (Somasi I, II, terakhir, teguran) dicatat di riwayat surat. */
   const PERINGKAT = { 'Lainnya': 0, 'Permohonan Pembayaran': 1, 'Teguran / Peringatan': 2, 'Somasi I': 3, 'Somasi II': 4, 'Somasi III / Terakhir': 5 };
@@ -88,11 +108,12 @@ window.DATA = (function () {
     if (terbaru && terbaru.tenggat && terbaru.tenggat > (lama.tenggat || '')) lama.tenggat = terbaru.tenggat;
     return n;
   }
+  const BATAS_VERIF = 4000;   // catatan selisih antarsumber bisa panjang; jangan terpotong diam-diam
   /** Tambah catatan verifikasi tanpa menggandakan kalimat yang sama. */
   function tambahVerifikasi(r, catatan) {
     const ada = r.verifikasi ? r.verifikasi.split(' · ') : [];
     for (const c of [].concat(catatan).map(teks).filter(Boolean)) if (!ada.includes(c)) ada.push(c);
-    r.verifikasi = ada.join(' · ').slice(0, 1000);
+    r.verifikasi = ada.join(' · ').slice(0, BATAS_VERIF);
   }
   const skala = v => { const n = Math.round(Number(v)); return n >= 1 && n <= 5 ? n : 0; };
   const normalTL = t => ({ tgl: tglSah(teks(t && t.tgl)) ? teks(t.tgl) : '', uraian: teks(t && t.uraian).slice(0, 600), noSurat: teks(t && t.noSurat).slice(0, 120) });
@@ -264,9 +285,10 @@ window.DATA = (function () {
     for (let i = 0; i < Math.min(rows.length, 40); i++) {
       const peta = {};
       (rows[i] || []).forEach((h, j) => {
-        const k = kunciHeader(h);
+        const k = kunciHeader(h), rinci = RINCIAN_RE.exec(teks(h));
         const cocok = SINONIM.find(([, re]) => re.test(k));
-        if (cocok) peta[j] = cocok[0];
+        if (rinci && rinci[1].trim()) peta[j] = 'rincian:' + rinci[1].trim().slice(0, 80);
+        else if (cocok) peta[j] = cocok[0];
       });
       const nilaiKolom = Object.values(peta);
       if (nilaiKolom.length >= 3 && (nilaiKolom.includes('rekanan') || nilaiKolom.includes('asalSurat'))) return { baris: i, peta };
@@ -312,17 +334,18 @@ window.DATA = (function () {
     return '';
   }
 
+  /** Satu sel terisi -> kolom catatan sementara (kolom tak dikenal = perihal lain; "rincian:" = rincian sumber). */
+  function isiSel(o, k, v) {
+    if (!k) o.perihalLain.push(teks(v));
+    else if (k.startsWith('rincian:')) o.rinci[k.slice(8)] = typeof v === 'number' ? v : teks(v);
+    else if (k === 'ket') o.ket.push(teks(v));
+    else if (k === 'tindakLanjut') o.tlTeks += (o.tlTeks ? '\n' : '') + teks(v);
+    else if (o[k] === undefined) o[k] = v;
+  }
   function barisKeCatatan(row, peta, sumber) {
-    const o = { tlTeks: '', ket: [], perihalLain: [] };
-    row.forEach((v, j) => {
-      const k = peta[j];
-      if (v === '' || v === null || v === undefined) return;
-      if (!k) { o.perihalLain.push(teks(v)); return; }
-      if (k === 'ket') o.ket.push(teks(v));
-      else if (k === 'tindakLanjut') o.tlTeks += (o.tlTeks ? '\n' : '') + teks(v);
-      else if (o[k] === undefined) o[k] = v;
-    });
-    const semua = row.map(teks).join(' ');
+    const o = { tlTeks: '', ket: [], perihalLain: [], rinci: {} };
+    row.forEach((v, j) => { if (v !== '' && v !== null && v !== undefined) isiSel(o, peta[j], v); });
+    const semua = row.filter((v, j) => !String(peta[j] || '').startsWith('rincian:')).map(teks).join(' ');   // rincian tidak dipakai menebak
     const disp = DISPOSISI_TEBAK.find(([, re]) => re.test(teks(o.disposisi)));
     const r = {
       noAgenda: teks(o.noAgenda), noSurat: teks(o.noSurat), tglSurat: tglExcel(o.tglSurat), tglTerima: tglExcel(o.tglTerima),
@@ -333,6 +356,7 @@ window.DATA = (function () {
       status: STATUS.includes(teks(o.statusTeks)) ? teks(o.statusTeks) : tebakStatus(o, semua),
       ket: [...o.ket, ...o.perihalLain.filter(x => !/^[ODT]$/.test(x))].join(' · '), sumber,
       tindakLanjut: tindakLanjutDari(o), tenggat: tglExcel(o.tenggat), verifikasi: teks(o.verifikasi),
+      rincian: Object.keys(o.rinci).length ? [o.rinci] : [],
     };
     return normal(r);
   }
@@ -405,6 +429,14 @@ window.DATA = (function () {
     const tingkatLama = lama.tingkat;
     if (gabungSurat(lama, baru.surat || [])) diisi.push(lama.tingkat !== tingkatLama ? 'surat lanjutan (tingkat naik)' : 'surat lanjutan');
     if (baru.verifikasi && !(lama.verifikasi || '').includes(baru.verifikasi)) { tambahVerifikasi(lama, baru.verifikasi); diisi.push('verifikasi'); }
+    if (gabungRincian(lama, baru.rincian)) diisi.push('rincian sumber');
+  }
+  /** Tambah baris rincian sumber yang belum ada (tanpa ganda). -> jumlah baris baru */
+  function gabungRincian(lama, daftar) {
+    const adaR = new Set((lama.rincian = lama.rincian || []).map(kunciRincian));
+    const rBaru = (daftar || []).filter(x => !adaR.has(kunciRincian(x))).slice(0, Math.max(0, 2000 - lama.rincian.length));
+    lama.rincian.push(...rBaru);
+    return rBaru.length;
   }
   /** Gabung aman: hanya mengisi kolom yang kosong (tidak menimpa), menambah tindak lanjut & surat lanjutan. -> daftar perubahan */
   function isiKosong(lama, baru) {
@@ -424,5 +456,5 @@ window.DATA = (function () {
 
   return Object.freeze({ STATUS, TINGKAT, DISPOSISI, POSISI, SELESAI, normal, angka, tglSah, hariIni, selisihHari, idBaru, saldoTerbuka, aktif,
     lewatTenggat, risiko, dampakOtomatis, kemungkinanOtomatis, ringkasan, narasi, rekomendasi, tglPanjang, rupiah, ringkas, persen,
-    petakanHeader, dariTabel, tebakTingkat, tglExcel, tglTeks, kunciNama, samaNama, calonPasangan, cariPasangan, selisih, isiKosong, keCSV, gabungSurat, tambahVerifikasi, peringkat });
+    petakanHeader, dariTabel, tebakTingkat, tglExcel, tglTeks, kunciNama, samaNama, calonPasangan, cariPasangan, selisih, isiKosong, keCSV, gabungSurat, tambahVerifikasi, peringkat, samarkan });
 })();

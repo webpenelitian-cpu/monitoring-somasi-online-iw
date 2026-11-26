@@ -34,14 +34,22 @@ window.SIMPAN = (function () {
      kunci otomatis, keluar akun, atau UID berbeda. */
   const INGAT = 'sesi-kunci', BATAS_INGAT_MENIT = 30;
   const bacaIngat = () => tx('readonly', s => s.get(INGAT));
-  const lupakanKunci = () => tx('readwrite', s => s.delete(INGAT)).catch(() => {});
+  /* Hapus di IndexedDB asinkron: bila halaman langsung di-refresh/ditutup, transaksi bisa batal. Karena itu waktu
+     pencabutan juga dicatat SINKRON di localStorage (hanya stempel waktu, bukan rahasia); kunci yang diingat sebelum
+     waktu itu ditolak saat pemulihan. */
+  const DICABUT = 'ms-kunci-dicabut';
+  const waktuDicabut = () => { try { return Number(localStorage.getItem(DICABUT)) || 0; } catch { return 0; } };
+  const lupakanKunci = () => {
+    try { localStorage.setItem(DICABUT, String(Date.now())); } catch { /* mode privat: tetap hapus di IndexedDB */ }
+    return tx('readwrite', s => s.delete(INGAT)).catch(() => {});
+  };
   let sentuhT = 0;
   function ingatKunci(uid, oleh) {
     const k = sesi.kunci;
     if (!k || !(k.kunci instanceof CryptoKey) || k.kunci.extractable) return Promise.resolve();   // hanya kunci yang tidak bisa diekspor
     sentuhT = Date.now();
     return tx('readwrite', s => s.put({ kunci: k.kunci, garam: k.garam, iter: k.iter, uid: uid || '', asal: location.origin,
-      oleh: String(oleh || '').slice(0, 120), terakhir: sentuhT }, INGAT)).catch(() => {});
+      oleh: String(oleh || '').slice(0, 120), terakhir: sentuhT, dibuat: Math.max(sentuhT, waktuDicabut() + 1) }, INGAT)).catch(() => {});
   }
   /** Tandai aktivitas (paling sering 1x/menit) agar batas menganggur dihitung dari aktivitas terakhir. */
   function sentuh() {
@@ -51,7 +59,7 @@ window.SIMPAN = (function () {
   }
   /** Kunci yang diingat sah: CryptoKey non-extractable, origin & UID sama, belum menganggur lewat batas. */
   const ingatSah = (r, uid, kini) => r.kunci instanceof CryptoKey && !r.kunci.extractable && r.asal === location.origin
-    && r.uid === (uid || '') && r.terakhir <= kini && kini - r.terakhir <= BATAS_INGAT_MENIT * 60000;
+    && r.uid === (uid || '') && r.terakhir <= kini && kini - r.terakhir <= BATAS_INGAT_MENIT * 60000 && (r.dibuat || 0) > waktuDicabut();
   /** Ada kunci yang diingat (belum diperiksa keabsahannya). */
   const adaIngat = () => bacaIngat().then(r => !!r, () => false);
   /** Buka ulang brankas dari kunci yang diingat. -> nama pengguna (jejak audit) atau '' bila tidak bisa (kunci dihapus). */
