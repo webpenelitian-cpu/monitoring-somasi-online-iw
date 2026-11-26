@@ -1,7 +1,8 @@
 /* OCR surat somasi. Dua jalur, keduanya TIDAK mengirim dokumen ke luar perangkat:
    1. Mesin Laptop (paling andal) — layanan ocr/server_ocr.py di 127.0.0.1 (pintasan desktop): Tesseract 5 tessdata_best
       (ind+eng), RapidOCR PP-OCR dengan GPU DirectML, dan RapidOCR 3 PP-OCRv6; lapisan teks PDF digital dipakai langsung.
-   2. Mesin Peramban (cadangan saat dibuka online) — tesseract.js 5 (WASM, data bahasa ind+eng dari folder vendor) pada
+   2. Mesin Peramban (saat dibuka online) — PaddleOCR PP-OCRv4 lewat ONNX Runtime Web (js/ocr-paddle.js, WebGPU/WASM) dan
+   tesseract.js 5 (WASM, data bahasa ind+eng dari folder vendor) pada
       dua praolah berbeda + lapisan teks PDF (pdf.js 3.11.174, isEvalSupported:false).
    Hasil semua mesin diadu oleh EKSTRAK.pungutSuara; manusia tetap wajib memverifikasi sebelum menyimpan. */
 'use strict';
@@ -115,8 +116,24 @@ window.OCR = (function () {
       b.push((await w.recognize(biner(kanvas[i]))).data.text);
     }
     const mesin = [{ mesin: 'Tesseract.js (asli)', teks: a.join('\n\f\n') }, { mesin: 'Tesseract.js (biner Otsu)', teks: b.join('\n\f\n') }];
+    const catatan = await tambahPaddle(mesin, kanvas, kabar);
     if (teksDigital.replace(/\s/g, '').length > 80) mesin.unshift({ mesin: 'Teks digital PDF', teks: teksDigital });
-    return { jalur: 'peramban', mesin, halaman, catatan: '' };
+    return { jalur: 'peramban', mesin, halaman, catatan };
+  }
+  /** Mesin ketiga: PaddleOCR PP-OCRv4 di peramban (ONNX Runtime Web). Bila gagal, Tesseract tetap dipakai dan alasannya dicatat. */
+  async function tambahPaddle(mesin, kanvas, kabar) {
+    try {
+      if (!window.OCR_PADDLE) await muatSkrip('js/ocr-paddle.js' + versiAset());
+      const p = await window.OCR_PADDLE.baca(kanvas, kabar);
+      mesin.push({ mesin: `PaddleOCR PP-OCRv4 (peramban, ${p.ep === 'webgpu' ? 'WebGPU' : 'WASM'})`, teks: p.teks });
+      return '';
+    } catch (e) {
+      return 'PaddleOCR peramban tidak dapat dijalankan di perangkat ini (' + ((e && e.message) || e) + '); hasil memakai Tesseract.js.';
+    }
+  }
+  function versiAset() {
+    const v = ((document.querySelector('meta[name="versi-aset"]') || {}).content || '').replace(/[^\w]/g, '');
+    return v ? '?v=' + v : '';
   }
 
   async function baca(berkas, kabar) {

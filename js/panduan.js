@@ -37,7 +37,7 @@ window.PANDUAN = (function () {
       <li>Ketentuan jaminan mengacu pada Perpres 16/2018 jo. 12/2021 dan pedoman SCM internal. Nilai/ambang tidak ditetapkan aplikasi; cek di sumber resmi yang berlaku.</li></ul>`],
     ['ocr', 'Impor Scan (OCR) & upload massal', `<ol>
       <li>Seret-lepas berkas ke kotak upload, klik <b>Pilih dari perangkat</b>, atau <b>Pilih dari Google Drive</b> (versi online). Boleh banyak sekaligus: maks. 25 berkas, 25 MB per berkas (PDF, JPG, PNG).</li>
-      <li>Berkas masuk <b>Antrean upload</b> dan dibaca otomatis satu per satu. Lewat pintasan laptop dipakai 3 mesin OCR (paling akurat); lewat web dipakai OCR peramban.</li>
+      <li>Berkas masuk <b>Antrean upload</b> dan dibaca otomatis satu per satu. Lewat pintasan laptop dipakai 3 mesin OCR (paling cepat); lewat web dipakai PaddleOCR PP-OCRv4 di peramban (GPU bila ada) ditambah Tesseract.js, lalu hasilnya diadu. Unduhan pertama ±42 MB, berikutnya dari cache.</li>
       <li>Dokumen tampil di kiri, isian di kanan. Label <b>“Mesin berbeda — WAJIB periksa”</b> berarti hasil tidak sepakat: pilih/ketik nilai yang benar. Cocokkan angka rupiah dengan terbilang di surat.</li>
       <li>Centang <b>“Saya sudah mencocokkan setiap isian”</b> lalu <b>Simpan</b>; berkas berikutnya langsung muncul. <b>Batal</b> melewati berkas itu.</li></ol>
       <p class="bantu">Dokumen tidak dikirim ke server. Antrean dikosongkan otomatis saat aplikasi dikunci.</p>`],

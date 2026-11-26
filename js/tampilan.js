@@ -184,7 +184,7 @@ window.TAMPIL = (function () {
   function ocr(lap, drive) {
     return `<section class="kartu"><h2 class="judul-orn">Impor dari scan surat (OCR)</h2>
       <p>Pilih scan surat somasi (PDF atau gambar). Teks dibaca beberapa mesin OCR, hasilnya diadu, lalu <b>Anda wajib mencocokkan setiap isian dengan dokumen asli</b> sebelum disimpan. Dokumen tidak dikirim ke luar perangkat.</p>
-      <p><span class="pil ${lap.ada ? 'ok' : 'waspada'}">${lap.ada ? 'Mesin laptop aktif: ' + esc((lap.mesin || []).join(' · ')) : 'Mesin peramban (tesseract.js). Untuk akurasi tertinggi buka lewat pintasan desktop “Monitoring Somasi”.'}</span></p>
+      <p><span class="pil ${lap.ada ? 'ok' : 'waspada'}">${lap.ada ? 'Mesin laptop aktif: ' + esc((lap.mesin || []).join(' · ')) : 'Mesin peramban: PaddleOCR PP-OCRv4 (GPU/CPU) + Tesseract.js, hasilnya diadu; dokumen tidak keluar dari perangkat. Unduhan pertama ±42 MB lalu tersimpan di cache. Pintasan desktop “Monitoring Somasi” tetap jalur tercepat.'}</span></p>
       ${panelUnggah({ jenis: 'scan', id: 'berkas-scan', accept: '.pdf,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,application/pdf,image/*', drive, aksiDrive: 'drive-scan', ket: 'PDF, JPG, PNG · maks. 25 berkas sekaligus, 25 MB per berkas · dibaca satu per satu, diverifikasi satu per satu' })}
       <div id="ocr-kabar" role="status" aria-live="polite"></div></section>
       <section class="kartu" id="ocr-antrian" hidden></section>
