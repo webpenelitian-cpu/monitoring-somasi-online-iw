@@ -721,5 +721,13 @@
   window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
 
   ['focusin', 'pointerdown'].forEach(e => $('#form-kunci').addEventListener(e, () => { muatModul().catch(() => {}); }, { once: true }));
+  // Server laptop berhenti sendiri setelah 15 menit tanpa permintaan; selama jendela aplikasi terbuka, kirim detak
+  // status tiap 5 menit agar server baru berhenti setelah jendela ditutup (aturan bersama no. 10).
+  function mulaiDetakLaptop() {
+    const token = (document.querySelector('meta[name="ocr-token"]') || {}).content || '';
+    if (!token || !/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) return;
+    setInterval(() => { fetch('/api/ocr/status', { headers: { 'X-OCR-Token': token }, cache: 'no-store' }).catch(() => {}); }, 5 * 60000);
+  }
+  mulaiDetakLaptop();
   mulai();
 })();
