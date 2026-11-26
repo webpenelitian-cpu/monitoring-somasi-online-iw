@@ -584,6 +584,16 @@
     'impor-terapkan': terapkanImpor, 'impor-batal': () => { st.imporBaris = null; st.lembar = []; pasang($('#impor-hasil'), ''); },
     cadangan, cetak: () => window.print(), 'ocr-batal': lewatiOcr,
     'tandai-terverifikasi': tandaiTerverifikasi,
+    // Buka/tutup nomor rekening pada tabel rincian ini saja; tidak disimpan (render ulang/kunci = tersamar lagi).
+    rekening: b => {
+      const r = data().somasi.find(x => x.id === b.dataset.id), wadah = b.closest('[data-rincian]');
+      if (!r || !wadah) return;
+      const tmp = document.createElement('div');
+      pasang(tmp, T.rincian(r, b.getAttribute('aria-pressed') !== 'true', true));   // bagian tetap terbuka saat tombol dipakai
+      const baru = tmp.firstElementChild;
+      wadah.replaceWith(baru);
+      baru.querySelector('[data-aksi="rekening"]').focus();
+    },
     'drive-excel': () => ambilDrive('excel'), 'drive-scan': () => ambilDrive('scan'),
     'antrian-verifikasi': b => { if (!st.ocr) tampilVerifikasi(st.antrian.find(x => x.id === b.dataset.id)); },
     'antrian-bersihkan': () => { st.antrian = st.antrian.filter(x => !['tersimpan', 'dilewati', 'gagal'].includes(x.status)); renderAntrian(); },

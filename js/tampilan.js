@@ -122,13 +122,18 @@ window.TAMPIL = (function () {
     return `${verif}<div class="grid-2"><div class="tabel-bungkus"><table><tbody>${baris.filter(b => b[1] && b[1] !== '-').map(([k, v]) => `<tr><th scope="row">${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</tbody></table></div>
       <div><h3 class="judul-orn">Riwayat surat masuk (${r.surat.length})</h3>${surat}<h3 class="judul-orn">Riwayat tindak lanjut perusahaan</h3>${tl}</div></div>${rincian(r)}`;
   }
-  /** Rincian sumber (baris register asli, mis. per invoice). Nomor rekening hanya 4 digit terakhir. */
-  function rincian(r) {
+  /** Rincian sumber (baris register asli, mis. per invoice). Nomor rekening tersamar (4 digit terakhir) kecuali
+      pengguna menekan "Tampilkan nomor rekening" (tampil=true). Status tidak disimpan: render ulang = tersamar lagi.
+      Saat tersamar, nomor lengkap tidak dimasukkan ke DOM. */
+  function rincian(r, tampil = false, terbuka = tampil) {
     const daftar = r.rincian || [];
     if (!daftar.length) return '';
     const kol = [...new Set(daftar.flatMap(x => Object.keys(x)))];
-    const sel = (k, v) => esc(D.samarkan(k, typeof v === 'number' && /rp|nilai|pengajuan|realisasi|sisa|hutang/i.test(k) ? D.rupiah(v) : v));
-    return `<details class="rincian-sumber"><summary>Rincian sumber (${daftar.length} baris)</summary><div class="tabel-bungkus"><table>
+    const angkaRp = (k, v) => (typeof v === 'number' && /rp|nilai|pengajuan|realisasi|sisa|hutang/i.test(k) ? D.rupiah(v) : v);
+    const sel = (k, v) => esc(tampil ? angkaRp(k, v) : D.samarkan(k, angkaRp(k, v)));
+    const adaRek = daftar.some(x => Object.keys(x).some(k => x[k] !== '' && D.samarkan(k, 'x') !== 'x'));
+    const tombol = adaRek ? `<p class="baris-btn"><button type="button" class="btn" data-aksi="rekening" data-id="${esc(r.id)}" aria-pressed="${tampil}">${tampil ? 'Sembunyikan nomor rekening' : 'Tampilkan nomor rekening'}</button></p>` : '';
+    return `<details class="rincian-sumber" data-rincian="${esc(r.id)}"${terbuka ? ' open' : ''}><summary>Rincian sumber (${daftar.length} baris)</summary>${tombol}<div class="tabel-bungkus"><table>
       <thead><tr>${kol.map(k => `<th scope="col">${esc(k)}</th>`).join('')}</tr></thead>
       <tbody>${daftar.map(x => `<tr>${kol.map(k => `<td>${x[k] === undefined ? '' : sel(k, x[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>`;
   }
@@ -294,5 +299,5 @@ window.TAMPIL = (function () {
       <section class="kartu"><h2>Mode penyimpanan</h2><p>${esc(mode)}</p></section>`;
   }
 
-  return Object.freeze({ esc, antrian, ringkasan, grafik, daftar, tabelDaftar, formSomasi, detail, impor, pratinjauImpor, ocr, hasilOcr, laporan, tataKelola, pengaturan });
+  return Object.freeze({ esc, antrian, ringkasan, grafik, daftar, tabelDaftar, formSomasi, detail, rincian, impor, pratinjauImpor, ocr, hasilOcr, laporan, tataKelola, pengaturan });
 })();
