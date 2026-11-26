@@ -172,7 +172,8 @@ window.TAMPIL = (function () {
     const n = { baru: 0, isi: 0, sama: 0 }, beda = baris.filter(b => b.beda && b.beda.length).length;
     baris.forEach(b => n[b.aksi]++);
     const ubah = n.baru + n.isi + baris.filter(b => b.aksi === 'sama' && b.beda && b.beda.length).length;
-    const pilihLembar = (lembar || []).map((l, i) => `<label class="cek"><input type="checkbox" class="pilih-lembar" data-i="${i}"${l.pakai ? ' checked' : ''}> Lembar “${esc(l.nama)}” · ${l.catatan.length} baris${l.adaNilai ? '' : ' · <i>register tanpa kolom nilai (hanya baris berkata “somasi”)</i>'}</label>`).join('');
+    const jenisLembar = l => (l.arsip ? ` · <b>${l.arsip.jenis === 'lokasi' ? 'Lokasi Tagihan' : 'Jaminan Pelaksanaan'}</b>` : '');
+    const pilihLembar = (lembar || []).map((l, i) => `<label class="cek"><input type="checkbox" class="pilih-lembar" data-i="${i}"${l.pakai ? ' checked' : ''}> Lembar “${esc(l.nama)}”${jenisLembar(l)} · ${l.arsip ? l.arsip.catatan.length : l.catatan.length} baris${l.adaNilai ? '' : ' · <i>register tanpa kolom nilai (hanya baris berkata “somasi”)</i>'}</label>`).join('');
     return `<fieldset><legend>Lembar yang diimpor</legend>${pilihLembar}</fieldset>
       <p class="pesan info" role="status">${baris.length} baris terbaca: ${n.baru} somasi baru, ${n.isi} melengkapi data yang ada, ${n.sama} sudah lengkap${beda ? `, <b>${beda} selisih nilai/tingkat</b> akan dicatat di keterangan tanpa menimpa` : ''}.</p>
       <div class="tabel-bungkus"><table><thead><tr><th>Aksi</th><th>Rekanan</th><th>Pengirim</th><th>Proyek</th><th>Tingkat</th><th class="angka">Nilai</th><th class="angka">Saldo</th><th>Status</th></tr></thead><tbody>

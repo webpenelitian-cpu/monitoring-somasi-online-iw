@@ -82,7 +82,12 @@ window.SIMPAN = (function () {
   /** Status sesi brankas (di memori saja). */
   const sesi = { kunci: null, data: null, rev: 0, cloud: false, mundur: 0, ukuran: 0 };
 
-  function dataKosong() { return { versi: 1, somasi: [], jejak: [], pengaturan: { unit: '', kunciMenit: 10 } }; }
+  function dataKosong() { return { versi: 1, somasi: [], jejak: [], lokasi: [], jampel: [], pengaturan: { unit: '', kunciMenit: 10 } }; }
+  /** Lokasi Tagihan & Jampel (menu tambahan): brankas lama tanpa daftar ini mendapat daftar kosong, tanpa migrasi. */
+  function normalArsip(data) {
+    const A = window.ARSIP;
+    for (const k of ['lokasi', 'jampel']) data[k] = Array.isArray(data[k]) && A ? data[k].map(A.normal[k]) : [];
+  }
 
   /** Sumber amplop: cloud (bila aktif & masuk) diutamakan, lokal sebagai salinan. */
   async function ambilAmplop() {
@@ -105,6 +110,7 @@ window.SIMPAN = (function () {
     const data = await window.KRIPTO.buka(k, amplop);
     if (!data || !Array.isArray(data.somasi) || !Array.isArray(data.jejak)) throw new Error('Isi brankas tidak dikenali.');
     data.somasi = data.somasi.map(window.DATA.normal);
+    normalArsip(data);
     data.pengaturan = pengaturanSah(data.pengaturan);
     Object.assign(sesi, { kunci: k, data, rev: amplop.rev || 0 });
     sesi.mundur = cekMundur(sesi.rev);
@@ -179,6 +185,7 @@ window.SIMPAN = (function () {
     const cek = await window.KRIPTO.periksaJejak(data.jejak);
     if (!cek.utuh) throw new Error('Jejak audit cadangan tidak utuh (rusak di entri ' + cek.rusakDi + '). Pemulihan dibatalkan.');
     data.somasi = data.somasi.map(window.DATA.normal);
+    normalArsip(data);
     data.pengaturan = pengaturanSah(data.pengaturan);
     sesi.data = data;
     return data;

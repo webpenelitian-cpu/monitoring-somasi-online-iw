@@ -22,6 +22,19 @@ window.PANDUAN = (function () {
       <li><b>Tindak lanjut</b>: klik nama rekanan › <b>Ubah / tambah tindak lanjut</b>; riwayat tampil sebagai linimasa.</li>
       <li><b>Status Selesai</b> membuat saldo terbuka nol. <b>Hapus</b> wajib disertai alasan (tercatat di jejak audit).</li>
       <li><b>Unduh CSV</b> untuk Excel. Berkas CSV tidak terenkripsi: simpan di lokasi aman.</li></ul>`],
+    ['lokasi', 'Lokasi Tagihan', `<ul>
+      <li><b>Isi data</b>: unduh/ekspor lembar register lokasi tagihan ke .xlsx, lalu buka <b>Impor Excel</b>. Kolom dikenali dari judulnya (Tanggal masuk, Berkas, No Reg, Rekanan, Proyek, Tanggal, Status, KET, PIC, KET kedua = alasan, Nilai).</li>
+      <li><b>Impor ulang</b> aman: data yang sama tidak digandakan; bila tanggal status di sumber lebih baru, lokasi/status diperbarui dan posisi lama disimpan di <b>Riwayat perubahan</b>.</li>
+      <li><b>Saring</b> per lokasi, status, PIC, berkas, proyek, atau <b>Hanya dokumen belum lengkap</b> (dibaca dari kata kunci di kolom alasan, mis. TTD vendor, kuitansi asli, faktur pajak, nota).</li>
+      <li><b>Umur</b> dihitung otomatis: hari sejak berkas masuk dan hari sejak status terakhir.</li>
+      <li>Klik No Reg untuk detail, <b>Ubah</b> (isi alasan perubahan) atau <b>Hapus</b> (alasan wajib). Semua perubahan tercatat di jejak audit.</li></ul>`],
+    ['jampel', 'Jaminan Pelaksanaan (Jampel)', `<ul>
+      <li><b>Isi data</b>: unduh tiap lembar BOX ke .xlsx lalu <b>Impor Excel</b> (boleh beberapa lembar sekaligus). Judul kolom boleh di baris kedua. Nama lembar BOX disimpan sebagai lokasi fisik.</li>
+      <li><b>Sisa waktu</b> selalu dihitung dari tanggal berakhir terhadap hari ini, tidak disalin dari sumber.</li>
+      <li><b>Pengingat</b> 60, 30, dan 7 hari sebelum berakhir tampil di menu ini dan di <b>Ringkasan Eksekutif</b>. Jaminan yang sudah lewat tetapi masih berstatus Aktif ditandai merah.</li>
+      <li><b>Status</b>: Aktif, Diperpanjang, Diklaim/Dicairkan, Dikembalikan, Expired. Ubah lewat <b>Ubah</b> dan isi alasannya.</li>
+      <li><b>Pengambilan dokumen asli</b>: catat tanggal, siapa, dan uraian di formulir Ubah; log tampil di detail.</li>
+      <li>Ketentuan jaminan mengacu pada Perpres 16/2018 jo. 12/2021 dan pedoman SCM internal. Nilai/ambang tidak ditetapkan aplikasi; cek di sumber resmi yang berlaku.</li></ul>`],
     ['ocr', 'Impor Scan (OCR) & upload massal', `<ol>
       <li>Seret-lepas berkas ke kotak upload, klik <b>Pilih dari perangkat</b>, atau <b>Pilih dari Google Drive</b> (versi online). Boleh banyak sekaligus: maks. 25 berkas, 25 MB per berkas (PDF, JPG, PNG).</li>
       <li>Berkas masuk <b>Antrean upload</b> dan dibaca otomatis satu per satu. Lewat pintasan laptop dipakai 3 mesin OCR (paling akurat); lewat web dipakai OCR peramban.</li>

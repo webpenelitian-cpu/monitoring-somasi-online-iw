@@ -66,23 +66,32 @@ window.KRIPTO = (function () {
   // (rollback/replay) tanpa gagal dekripsi.
   const aad = rev => te.encode(APP + '|brankas/utama|' + rev);
   const revSah = r => Number.isInteger(r) && r >= 0;
+  /* Isi dikompresi gzip SEBELUM dienkripsi (data tabular Lokasi Tagihan/Jampel bisa ribuan baris; batas dokumen
+     Firestore ~1 MB). Format amplop tidak berubah: saat dibuka, gzip dikenali dari 2 bait pertamanya (1F 8B), sedangkan
+     amplop lama berisi JSON polos (diawali "{"). */
+  const alir = (bait, aliran) => new Response(new Blob([bait]).stream().pipeThrough(aliran)).arrayBuffer();
+  const mampat = bait => (typeof CompressionStream === 'function' ? alir(bait, new CompressionStream('gzip')) : bait);
+  async function urai(bait) {
+    const b = new Uint8Array(bait);
+    return b[0] === 0x1f && b[1] === 0x8b ? td.decode(await alir(b, new DecompressionStream('gzip'))) : td.decode(b);
+  }
   async function kunci(sesi, obj, rev) {
     siap();
     rev = revSah(rev) ? rev : 0;
     const iv = acak(12);
-    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad(rev) }, sesi.kunci, te.encode(JSON.stringify(obj)));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad(rev) }, sesi.kunci, await mampat(te.encode(JSON.stringify(obj))));
     return { enc: JENIS, kdf: 'PBKDF2-SHA256', iter: sesi.iter, salt: sesi.garam, iv: b64(iv), ct: b64(ct), app: APP, rev };
   }
 
   async function buka(sesi, amplop) {
     if (!amplopSah(amplop)) throw new Error('Berkas brankas tidak dikenali atau rusak.');
-    let teks;
+    let bait;
     try {
-      teks = td.decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(amplop.iv), additionalData: aad(revSah(amplop.rev) ? amplop.rev : 0) }, sesi.kunci, unb64(amplop.ct)));
+      bait = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(amplop.iv), additionalData: aad(revSah(amplop.rev) ? amplop.rev : 0) }, sesi.kunci, unb64(amplop.ct));
     } catch {
       throw new Error('Kata sandi brankas salah, atau data telah diubah pihak lain.');
     }
-    return JSON.parse(teks);
+    return JSON.parse(await urai(bait));
   }
 
   async function sha256(teks) {

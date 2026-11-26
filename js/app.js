@@ -6,7 +6,7 @@
   const S = window.SIMPAN, K = window.KRIPTO;
   // Modul isi aplikasi dimuat setelah layar kunci tampil (saat kolom sandi difokus / formulir dikirim), agar layar kunci ringan.
   let D = window.DATA, T = window.TAMPIL, janjiModul = null;
-  const MODUL = ['js/data.js', 'js/xlsx.js', 'js/ekstrak.js', 'js/ocr.js', 'js/drive.js', 'js/grafik.js', 'js/tampilan.js', 'js/panduan.js'];
+  const MODUL = ['js/data.js', 'js/xlsx.js', 'js/ekstrak.js', 'js/ocr.js', 'js/drive.js', 'js/grafik.js', 'js/tampilan.js', 'js/arsip.js', 'js/panduan.js'];
   // Penanda versi dari situs publik (diisi alat/bangun_online.py) agar peramban tidak memakai JS lama dari cache.
   const VERSI = ((document.querySelector('meta[name="versi-aset"]') || {}).content || '').replace(/[^\w]/g, '');
   function muatSatu(src) {
@@ -20,10 +20,10 @@
   }
   const $ = s => document.querySelector(s);
   const pasang = (el, html) => window.HTML_AMAN.pasang(el, html);
-  const MENU = [['ringkasan', '◆', 'Ringkasan Eksekutif'], ['grafik', '▤', 'Grafik & Risiko'], ['daftar', '☰', 'Daftar Somasi'], ['ocr', '⎙', 'Impor Scan (OCR)'],
+  const MENU = [['ringkasan', '◆', 'Ringkasan Eksekutif'], ['grafik', '▤', 'Grafik & Risiko'], ['daftar', '☰', 'Daftar Somasi'], ['lokasi', '⌖', 'Lokasi Tagihan'], ['jampel', '⛨', 'Jaminan Pelaksanaan'], ['ocr', '⎙', 'Impor Scan (OCR)'],
     ['impor', '⇪', 'Impor Excel & Cadangan'], ['laporan', '▣', 'Laporan Manajemen'], ['tata-kelola', '⚖', 'Tata Kelola & Jejak Audit'], ['pengaturan', '⚙', 'Pengaturan'],
     ['panduan', '?', 'Panduan']];
-  const st = { oleh: '', filter: { cari: '', status: '', tingkat: '', proyek: '', verifikasi: '' }, urut: { kol: 'saldo', naik: false }, imporBaris: null, lembar: [], galatImpor: [], antrian: [], ocrJalan: false, ocr: null, idleT: 0, blob: [], pulih: null, idlePasang: false };
+  const st = { oleh: '', filter: { cari: '', status: '', tingkat: '', proyek: '', verifikasi: '' }, urut: { kol: 'saldo', naik: false }, imporBaris: null, lembar: [], galatImpor: [], antrian: [], ocrJalan: false, ocr: null, idleT: 0, blob: [], pulih: null, idlePasang: false, fArsip: { lokasi: {}, jampel: {} }, batasArsip: 200, imporArsip: null };
   const data = () => S.sesi.data;
   const kini = () => D.hariIni();
 
@@ -205,7 +205,9 @@
   });
 
   const HALAMAN = {
-    ringkasan: () => pasang($('#isi'), T.ringkasan(data(), kini())),
+    ringkasan: () => pasang($('#isi'), T.ringkasan(data(), kini()) + window.ARSIP.ringkasanHtml(data(), kini())),
+    lokasi: () => halamanArsip('lokasi'),
+    jampel: () => halamanArsip('jampel'),
     grafik: () => pasang($('#isi'), T.grafik()),
     daftar: () => { pasang($('#isi'), T.daftar(data(), st.filter)); isiTabel(); },
     impor: () => pasang($('#isi'), T.impor(window.DRIVE.tersedia())),
@@ -276,8 +278,56 @@
   }
   document.addEventListener('input', e => {
     const m = { 'f-cari': 'cari', 'f-status': 'status', 'f-tingkat': 'tingkat', 'f-proyek': 'proyek', 'f-verifikasi': 'verifikasi' }[e.target.id];
-    if (m) { st.filter[m] = e.target.value; isiTabel(); }
+    if (m) { st.filter[m] = e.target.value; isiTabel(); return; }
+    const ka = e.target.dataset && e.target.dataset.saringArsip, jenis = location.hash.slice(1).split('/')[0];
+    if (ka && st.fArsip[jenis]) { st.fArsip[jenis][ka] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; st.batasArsip = 200; isiTabelArsip(jenis); }
   });
+
+  // ------------------------------------------------------------------ Lokasi Tagihan & Jampel
+  const A = () => window.ARSIP;
+  function halamanArsip(jenis) {
+    st.batasArsip = 200;
+    pasang($('#isi'), A().halaman(jenis, data(), st.fArsip[jenis], kini()));
+    isiTabelArsip(jenis);
+  }
+  function isiTabelArsip(jenis) {
+    const t = $('#tabel-arsip');
+    if (t) pasang(t, A().tabel(jenis, A().saring(jenis, data()[jenis], st.fArsip[jenis], kini()), kini(), data().somasi, st.batasArsip));
+  }
+  const cariArsip = (jenis, id) => data()[jenis].find(x => x.id === id);
+  const judulArsip = (jenis, r) => (jenis === 'lokasi' ? `Berkas ${r.noReg || ''} · ${r.rekanan}` : `Jaminan ${r.noFile || ''} · ${r.rekanan}`);
+  function lihatArsip(jenis, id) {
+    const r = cariArsip(jenis, id);
+    if (!r) return;
+    bukaDialog(judulArsip(jenis, r), A().detail(jenis, r, kini(), data().somasi),
+      `<button type="button" class="btn" data-aksi="arsip-hapus" data-jenis="${jenis}" data-id="${T.esc(id)}">Hapus</button><button type="button" class="btn" data-aksi="tutup-dialog">Tutup</button><button type="button" class="btn utama-btn" data-aksi="arsip-ubah" data-jenis="${jenis}" data-id="${T.esc(id)}">Ubah</button>`);
+  }
+  function formArsip(jenis, id) {
+    const r = id ? cariArsip(jenis, id) : null;
+    bukaDialog(r ? 'Ubah ' + judulArsip(jenis, r) : (jenis === 'lokasi' ? 'Tambah berkas tagihan' : 'Tambah jaminan'), A().form(jenis, r),
+      `<button type="button" class="btn" data-aksi="tutup-dialog">Batal</button><button type="button" class="btn utama-btn" data-aksi="arsip-simpan" data-jenis="${jenis}" data-id="${T.esc(id || '')}">Simpan</button>`);
+  }
+  async function simpanArsip(jenis, id) {
+    const f = Object.fromEntries(new FormData($('#form-arsip')).entries());
+    if (!(f.rekanan || '').trim()) { alert('Isi nama rekanan.'); return; }
+    const lama = id ? cariArsip(jenis, id) : null, r = A().dariForm(jenis, lama, f, st.oleh);
+    const alasan = (f['alasan-ubah'] || '').trim().slice(0, 200);
+    const uraian = (lama ? (A().bedaForm(jenis, lama, r) || 'perubahan isian') : 'data baru') + (alasan ? ' · alasan: ' + alasan : '');
+    if (lama) { r.riwayat.push({ tgl: D.hariIni(), uraian, oleh: st.oleh, lokasi: '' }); Object.assign(lama, r); } else data()[jenis].push(r);
+    await catat(`${jenis}-${lama ? 'ubah' : 'tambah'}`, r.id, `${judulArsip(jenis, r)}: ${uraian}`);
+    await simpanSekarang();
+    dlg.close(); tampil();
+  }
+  async function hapusArsip(jenis, id) {
+    const r = cariArsip(jenis, id);
+    if (!r) return;
+    const alasan = prompt(`Hapus ${judulArsip(jenis, r)}? Tulis alasan penghapusan (wajib, dicatat di jejak audit):`);
+    if (!alasan || !alasan.trim()) return;
+    data()[jenis] = data()[jenis].filter(x => x.id !== id);
+    await catat(`${jenis}-hapus`, id, `${judulArsip(jenis, r)} dihapus. Alasan: ${alasan.trim().slice(0, 200)}`);
+    await simpanSekarang();
+    dlg.close(); tampil();
+  }
 
   // ------------------------------------------------------------------ dialog somasi
   const dlg = $('#dlg');
@@ -358,15 +408,42 @@
   async function lembarDari(berkas, hanya) {
     if (!/\.xlsx$/i.test(berkas.name)) throw new Error('bukan berkas .xlsx');
     const lembar = await window.XLSX_MINI.baca(await berkas.arrayBuffer());
-    return lembar.map(l => Object.assign({ nama: `${berkas.name} › ${l.nama}` }, D.dariTabel(l.rows, `Excel: ${berkas.name} › ${l.nama}`, hanya)))
-      .filter(l => l.catatan.length).map(l => Object.assign(l, { pakai: l.adaNilai }));
+    return lembar.map(l => {
+      const sumber = `Excel: ${berkas.name} › ${l.nama}`, a = A().dariTabel(l.rows, sumber);
+      // Register Lokasi Tagihan / Jampel dikenali dari judul kolomnya; selain itu dibaca sebagai data somasi.
+      if (a) return { nama: `${berkas.name} › ${l.nama}`, catatan: [], arsip: a, adaNilai: true, pakai: true };
+      return Object.assign({ nama: `${berkas.name} › ${l.nama}` }, D.dariTabel(l.rows, sumber, hanya));
+    }).filter(l => l.catatan.length || (l.arsip && l.arsip.catatan.length)).map(l => Object.assign(l, { pakai: l.arsip ? true : l.adaNilai }));
   }
   function tampilRencana() {
     const salin = data().somasi.map(r => D.normal(JSON.parse(JSON.stringify(r)))), baris = [];
     for (const l of st.lembar.filter(x => x.pakai)) for (const r of l.catatan) baris.push(rencanaImpor(salin, r));
     st.imporBaris = baris;
+    st.imporArsip = rencanaArsip();
     const galat = st.galatImpor.length ? `<p class="pesan galat" role="alert">Dilewati: ${st.galatImpor.map(T.esc).join('; ')}</p>` : '';
-    pasang($('#impor-hasil'), galat + (st.lembar.length ? T.pratinjauImpor(baris, st.lembar) : '<p class="pesan galat" role="alert">Tidak ada baris yang dikenali. Pastikan ada judul kolom seperti “Nama Rekanan”/“Rekanan”, “Proyek”, “Nilai”.</p>'));
+    pasang($('#impor-hasil'), galat + (st.lembar.length ? A().pratinjauHtml(st.imporArsip) + T.pratinjauImpor(baris, st.lembar) : '<p class="pesan galat" role="alert">Tidak ada baris yang dikenali. Pastikan ada judul kolom seperti “Nama Rekanan”/“Rekanan”, “Proyek”, “Nilai”.</p>'));
+    const tombol = $('[data-aksi="impor-terapkan"]'), nArsip = Object.values(st.imporArsip).flat().filter(b => ['baru', 'isi', 'perbarui'].includes(b.aksi)).length;
+    if (tombol && nArsip) { tombol.disabled = false; tombol.textContent = tombol.textContent.replace(/\d+ perubahan/, m => (parseInt(m, 10) + nArsip) + ' perubahan'); }
+  }
+  /** Rencana Lokasi/Jampel dari semua lembar terpilih (kembar lintas lembar/berkas ikut terdeteksi). */
+  function rencanaArsip() {
+    const per = { lokasi: [], jampel: [] };
+    for (const l of st.lembar.filter(x => x.pakai && x.arsip)) per[l.arsip.jenis].push(...l.arsip.catatan);
+    return { lokasi: A().rencana('lokasi', data().lokasi, per.lokasi), jampel: A().rencana('jampel', data().jampel, per.jampel) };
+  }
+  /** Satu entri jejak audit per jenis per impor (ribuan baris tidak dicatat satu per satu; riwayat per data tetap disimpan). */
+  async function terapkanArsip() {
+    const hasil = [];
+    for (const [jenis, xs] of Object.entries(st.imporArsip || {})) {
+      const n = { baru: 0, isi: 0, perbarui: 0 };
+      for (const b of xs) { const a = A().terapkan(jenis, data()[jenis], b); if (a) n[a]++; }
+      if (!n.baru && !n.isi && !n.perbarui) continue;
+      const sumber = [...new Set(xs.map(b => b.r.sumber))].slice(0, 5).join('; ');
+      await catat(`${jenis}-impor`, '', `${n.baru} baru, ${n.isi} dilengkapi, ${n.perbarui} diperbarui (riwayat disimpan) · ${sumber}`);
+      hasil.push(jenis === 'lokasi' ? `${n.baru + n.isi + n.perbarui} berkas lokasi` : `${n.baru + n.isi + n.perbarui} jaminan`);
+    }
+    st.imporArsip = null;
+    return hasil;
   }
   const salinan = r => D.normal(JSON.parse(JSON.stringify(r)));
   /** Rencana per baris dihitung terhadap salinan, agar baris kembar dalam satu berkas juga tergabung. */
@@ -398,9 +475,10 @@
   async function terapkanImpor() {
     const n = { baru: 0, isi: 0, beda: 0 };
     for (const b of st.imporBaris || []) await terapkanSatu(b, n);
+    const arsip = await terapkanArsip();
     st.imporBaris = null; st.lembar = [];
     await simpanSekarang();
-    pasang($('#impor-hasil'), `<p class="pesan ok" role="status">Impor selesai: ${n.baru} somasi baru, ${n.isi} dilengkapi${n.beda ? `, ${n.beda} selisih dicatat di keterangan untuk diperiksa` : ''}.</p>`);
+    pasang($('#impor-hasil'), `<p class="pesan ok" role="status">Impor selesai: ${n.baru} somasi baru, ${n.isi} dilengkapi${n.beda ? `, ${n.beda} selisih dicatat di keterangan untuk diperiksa` : ''}${arsip.length ? '; ' + arsip.join(', ') + ' diimpor/diperbarui' : ''}.</p>`);
   }
 
   // ------------------------------------------------------------------ cadangan
@@ -581,7 +659,11 @@
     'tutup-dialog': () => dlg.close(), tambah: () => bukaForm(null), csv: unduhCSV,
     ubah: b => { const r = data().somasi.find(x => x.id === b.dataset.id); if (r) bukaForm(r); },
     'simpan-somasi': b => simpanSomasi(b.dataset.id), hapus: b => hapusSomasi(b.dataset.id),
-    'impor-terapkan': terapkanImpor, 'impor-batal': () => { st.imporBaris = null; st.lembar = []; pasang($('#impor-hasil'), ''); },
+    'impor-terapkan': terapkanImpor, 'impor-batal': () => { st.imporBaris = null; st.imporArsip = null; st.lembar = []; pasang($('#impor-hasil'), ''); },
+    'arsip-lihat': b => lihatArsip(b.dataset.jenis, b.dataset.id), 'arsip-ubah': b => formArsip(b.dataset.jenis, b.dataset.id),
+    'arsip-tambah': b => formArsip(b.dataset.jenis, ''), 'arsip-simpan': b => simpanArsip(b.dataset.jenis, b.dataset.id),
+    'arsip-hapus': b => hapusArsip(b.dataset.jenis, b.dataset.id),
+    'arsip-lagi': () => { st.batasArsip += 200; isiTabelArsip(location.hash.slice(1).split('/')[0]); },
     cadangan, cetak: () => window.print(), 'ocr-batal': lewatiOcr,
     'tandai-terverifikasi': tandaiTerverifikasi,
     // Buka/tutup nomor rekening pada tabel rincian ini saja; tidak disimpan (render ulang/kunci = tersamar lagi).
